@@ -29,3 +29,5 @@ OBSERVER_ALERTS.md
 # Docker
 silkroute_pgdata/
 silkroute_redis/
+.vercel
+.env*.local
