@@ -1,0 +1,31 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+.venv/
+*.egg
+
+# Node
+node_modules/
+.next/
+dashboard/.next/
+dashboard/node_modules/
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Observer ephemeral
+OBSERVER_QUALITY.md
+OBSERVER_ARCH.md
+OBSERVER_ALERTS.md
+
+# IDE
+.vscode/
+.idea/
+
+# Docker
+silkroute_pgdata/
+silkroute_redis/

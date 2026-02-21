@@ -1,0 +1,90 @@
+# SilkRoute Docker Compose Stack
+# The fastest route from task to done — powered by China's best AI.
+#
+# Usage:
+#   docker compose up -d          Start all services
+#   docker compose logs -f        Follow logs
+#   docker compose down           Stop all services
+#
+# Services:
+#   litellm    - LLM proxy with Chinese model routing & budget enforcement
+#   postgres   - Cost tracking, session state, budget data
+#   redis      - Caching, rate limiting, event queue
+#
+# For production deployment, use docker-compose.prod.yml
+
+services:
+  # ==========================================================================
+  # LiteLLM Proxy — Chinese LLM routing, cost tracking, budget enforcement
+  # ==========================================================================
+  litellm:
+    image: ghcr.io/berriai/litellm:main-latest
+    container_name: silkroute-litellm
+    ports:
+      - "4000:4000"
+    environment:
+      DATABASE_URL: postgresql://silkroute:silkroute@postgres:5432/silkroute
+      STORE_MODEL_IN_DB: "true"
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      # API keys loaded from .env
+      OPENROUTER_API_KEY: ${SILKROUTE_OPENROUTER_API_KEY:-}
+      DEEPSEEK_API_KEY: ${SILKROUTE_DEEPSEEK_API_KEY:-}
+      DASHSCOPE_API_KEY: ${SILKROUTE_QWEN_API_KEY:-}
+      ZHIPUAI_API_KEY: ${SILKROUTE_GLM_API_KEY:-}
+    volumes:
+      - ./litellm_config.yaml:/app/config.yaml
+    command: --config /app/config.yaml --detailed_debug
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+  # ==========================================================================
+  # PostgreSQL — cost logs, project budgets, session state, audit trail
+  # ==========================================================================
+  postgres:
+    image: postgres:16-alpine
+    container_name: silkroute-postgres
+    environment:
+      POSTGRES_DB: silkroute
+      POSTGRES_USER: silkroute
+      POSTGRES_PASSWORD: silkroute
+    ports:
+      - "5432:5432"
+    volumes:
+      - silkroute_pgdata:/var/lib/postgresql/data
+      - ./sql/init.sql:/docker-entrypoint-initdb.d/01-init.sql
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U silkroute"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ==========================================================================
+  # Redis — session caching, rate limiting, event queue for daemon mode
+  # ==========================================================================
+  redis:
+    image: redis:7-alpine
+    container_name: silkroute-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - silkroute_redis:/data
+    restart: unless-stopped
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+
+volumes:
+  silkroute_pgdata:
+    driver: local
+  silkroute_redis:
+    driver: local

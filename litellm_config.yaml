@@ -1,0 +1,188 @@
+# SilkRoute LiteLLM Configuration
+# Chinese-model-first routing with 3-tier cost optimization
+#
+# Tier 1 (FREE):     Simple tasks — triage, templates, status checks
+# Tier 2 (STANDARD): Code review, PR descriptions, analysis
+# Tier 3 (PREMIUM):  Complex debugging, architecture, security review
+
+model_list:
+  # ========================================================================
+  # TIER 1: FREE MODELS (rate-limited, zero cost)
+  # ========================================================================
+  - model_name: silkroute-free-coder
+    litellm_params:
+      model: openrouter/qwen/qwen3-coder:free
+      api_key: os.environ/OPENROUTER_API_KEY
+      api_base: https://openrouter.ai/api/v1
+    model_info:
+      id: silkroute-free-coder
+      description: "Qwen3 Coder (Free) — simple coding tasks"
+
+  - model_name: silkroute-free-reasoning
+    litellm_params:
+      model: openrouter/deepseek/deepseek-r1-0528:free
+      api_key: os.environ/OPENROUTER_API_KEY
+      api_base: https://openrouter.ai/api/v1
+    model_info:
+      id: silkroute-free-reasoning
+      description: "DeepSeek R1 (Free) — simple reasoning tasks"
+
+  - model_name: silkroute-free-general
+    litellm_params:
+      model: openrouter/z-ai/glm-4.5-air:free
+      api_key: os.environ/OPENROUTER_API_KEY
+      api_base: https://openrouter.ai/api/v1
+    model_info:
+      id: silkroute-free-general
+      description: "GLM-4.5 Air (Free) — summaries and templates"
+
+  # ========================================================================
+  # TIER 2: STANDARD MODELS (cost-effective daily drivers)
+  # ========================================================================
+  - model_name: silkroute-standard
+    litellm_params:
+      model: openrouter/deepseek/deepseek-v3.2
+      api_key: os.environ/OPENROUTER_API_KEY
+      api_base: https://openrouter.ai/api/v1
+    model_info:
+      id: silkroute-standard
+      description: "DeepSeek V3.2 — primary workhorse ($0.25/$0.38 per M)"
+
+  - model_name: silkroute-standard-fallback
+    litellm_params:
+      model: openrouter/qwen/qwen3-235b-a22b-2507
+      api_key: os.environ/OPENROUTER_API_KEY
+      api_base: https://openrouter.ai/api/v1
+    model_info:
+      id: silkroute-standard-fallback
+      description: "Qwen3 235B — standard fallback ($0.07/$0.46 per M)"
+
+  - model_name: silkroute-standard-tools
+    litellm_params:
+      model: openrouter/z-ai/glm-4.7
+      api_key: os.environ/OPENROUTER_API_KEY
+      api_base: https://openrouter.ai/api/v1
+    model_info:
+      id: silkroute-standard-tools
+      description: "GLM-4.7 — best tool calling ($0.25/$1.00 per M)"
+
+  - model_name: silkroute-standard-light
+    litellm_params:
+      model: openrouter/qwen/qwen3-30b-a3b
+      api_key: os.environ/OPENROUTER_API_KEY
+      api_base: https://openrouter.ai/api/v1
+    model_info:
+      id: silkroute-standard-light
+      description: "Qwen3 30B — lightweight ($0.06/$0.22 per M)"
+
+  # ========================================================================
+  # TIER 3: PREMIUM MODELS (max capability)
+  # ========================================================================
+  - model_name: silkroute-premium
+    litellm_params:
+      model: openrouter/deepseek/deepseek-r1-0528
+      api_key: os.environ/OPENROUTER_API_KEY
+      api_base: https://openrouter.ai/api/v1
+    model_info:
+      id: silkroute-premium
+      description: "DeepSeek R1 — complex reasoning ($0.40/$1.75 per M)"
+
+  - model_name: silkroute-premium-code
+    litellm_params:
+      model: openrouter/qwen/qwen3-coder
+      api_key: os.environ/OPENROUTER_API_KEY
+      api_base: https://openrouter.ai/api/v1
+    model_info:
+      id: silkroute-premium-code
+      description: "Qwen3 Coder 480B — heavy coding ($0.22/$0.95 per M)"
+
+  - model_name: silkroute-premium-agent
+    litellm_params:
+      model: openrouter/z-ai/glm-5
+      api_key: os.environ/OPENROUTER_API_KEY
+      api_base: https://openrouter.ai/api/v1
+    model_info:
+      id: silkroute-premium-agent
+      description: "GLM-5 — agentic tool calling ($1.00/$3.20 per M)"
+
+  - model_name: silkroute-premium-multiagent
+    litellm_params:
+      model: openrouter/moonshotai/kimi-k2
+      api_key: os.environ/OPENROUTER_API_KEY
+      api_base: https://openrouter.ai/api/v1
+    model_info:
+      id: silkroute-premium-multiagent
+      description: "Kimi K2 — multi-step agents ($0.39/$1.90 per M)"
+
+  # ========================================================================
+  # LOCAL MODELS (Ollama — Mac Studio / NVIDIA Spark)
+  # Uncomment when local inference hardware available
+  # ========================================================================
+  # - model_name: silkroute-local-qwen
+  #   litellm_params:
+  #     model: ollama/qwen3:30b-a3b
+  #     api_base: http://localhost:11434
+  #   model_info:
+  #     id: silkroute-local-qwen
+  #     description: "Qwen3 30B (Local Ollama) — FREE"
+
+  # - model_name: silkroute-local-glm
+  #   litellm_params:
+  #     model: ollama/glm4:9b
+  #     api_base: http://localhost:11434
+  #   model_info:
+  #     id: silkroute-local-glm
+  #     description: "GLM-4 9B (Local Ollama) — FREE"
+
+  # - model_name: silkroute-local-deepseek
+  #   litellm_params:
+  #     model: ollama/deepseek-v3:q4_K_M
+  #     api_base: http://localhost:11434
+  #   model_info:
+  #     id: silkroute-local-deepseek
+  #     description: "DeepSeek V3 Q4 (Local Ollama) — FREE, requires 120GB+ RAM"
+
+# ==========================================================================
+# GLOBAL SETTINGS
+# ==========================================================================
+litellm_settings:
+  # Budget enforcement
+  max_budget: 200
+  budget_duration: 30d
+
+  # Observability
+  callbacks:
+    - prometheus
+
+  # Cost tracking
+  success_callback:
+    - "langfuse"  # Optional — uncomment for detailed analytics
+
+  # Retry logic
+  num_retries: 3
+  request_timeout: 120
+
+  # Cache
+  cache: true
+  cache_params:
+    type: redis
+    host: redis
+    port: 6379
+
+# ==========================================================================
+# ROUTER SETTINGS — intelligent fallback chains
+# ==========================================================================
+router_settings:
+  routing_strategy: "cost-based-routing"
+  num_retries: 3
+  retry_after: 5
+  allowed_fails: 2
+  cooldown_time: 60
+
+  # Model group fallbacks:
+  # If primary model in a group fails, try the next one
+  model_group_alias:
+    silkroute-auto:
+      - silkroute-standard        # Try DeepSeek V3.2 first
+      - silkroute-standard-fallback  # Then Qwen3 235B
+      - silkroute-standard-tools  # Then GLM-4.7
