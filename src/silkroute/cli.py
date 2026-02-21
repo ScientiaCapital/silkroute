@@ -72,27 +72,42 @@ def init(path: str) -> None:
 @click.option("--tier", "-t", type=click.Choice(["free", "standard", "premium"]), default=None)
 @click.option("--project", "-p", default="default", help="Project name for cost attribution")
 @click.option("--max-iterations", default=25, help="Max agent loop iterations")
+@click.option("--budget", "-b", default=10.0, type=float, help="Session budget cap in USD")
 def run(
     task: str | None,
     model: str | None,
     tier: str | None,
     project: str,
     max_iterations: int,
+    budget: float,
 ) -> None:
     """Run the SilkRoute agent on a task.
 
     If no task is provided, starts an interactive session.
     """
-    if task:
-        console.print(f"[bold]Project:[/bold] {project}")
-        console.print(f"[bold]Task:[/bold] {task}")
-        console.print(f"[bold]Model:[/bold] {model or 'auto-routed'}")
-        console.print(f"[bold]Max iterations:[/bold] {max_iterations}")
-        console.print("\n[yellow]Agent loop not yet implemented — coming in Phase 02.[/yellow]")
-        console.print("Run [bold]silkroute models[/bold] to see available models.")
-    else:
+    if not task:
         console.print("[bold]Interactive mode not yet implemented.[/bold]")
         console.print("Usage: [bold]silkroute run 'describe your task here'[/bold]")
+        return
+
+    import asyncio
+
+    from silkroute.agent import run_agent
+
+    try:
+        asyncio.run(run_agent(
+            task,
+            model_override=model,
+            tier_override=tier,
+            project_id=project,
+            max_iterations=max_iterations,
+            budget_limit_usd=budget,
+        ))
+    except KeyboardInterrupt:
+        console.print("\n[yellow]Agent interrupted by user.[/yellow]")
+    except Exception as e:
+        console.print(f"\n[red]Agent error: {e}[/red]")
+        raise SystemExit(1)
 
 
 @main.command()
