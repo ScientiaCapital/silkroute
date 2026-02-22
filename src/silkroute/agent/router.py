@@ -2,13 +2,17 @@
 
 Selects the best Chinese LLM for a given task tier and capabilities,
 then generates the correct litellm model string for API routing.
+
+When ``SILKROUTE_USE_LITELLM_PROXY=true``, model strings are rewritten
+to the ``silkroute-*`` aliases defined in ``litellm_config.yaml``,
+routing traffic through the LiteLLM proxy at localhost:4000.
 """
 
 from __future__ import annotations
 
 import os
 
-from silkroute.config.settings import ModelTier
+from silkroute.config.settings import ModelTier, ProviderConfig
 from silkroute.providers.models import (
     DEFAULT_ROUTING,
     MODELS_BY_TIER,
@@ -79,10 +83,18 @@ def _score_model(model: ModelSpec, required: list[Capability]) -> float:
 def get_litellm_model_string(model: ModelSpec) -> str:
     """Generate the correct litellm model string for API routing.
 
-    - Ollama models → use model_id as-is (e.g., "ollama/qwen3:30b-a3b")
-    - Direct API key available → bare model_id (e.g., "deepseek/deepseek-v3.2")
-    - No direct key → prefix with "openrouter/" (e.g., "openrouter/deepseek/deepseek-v3.2")
+    Priority order:
+    1. LiteLLM proxy mode → ``silkroute-*`` alias (routes via localhost:4000)
+    2. Ollama models → model_id as-is
+    3. Direct API key → bare model_id
+    4. Otherwise → ``openrouter/`` prefix
     """
+    # Proxy mode: use silkroute-* aliases from litellm_config.yaml
+    if _use_litellm_proxy():
+        alias = _PROXY_MODEL_MAP.get(model.model_id)
+        if alias:
+            return alias
+
     if model.provider == Provider.OLLAMA:
         return model.model_id
 
@@ -91,6 +103,28 @@ def get_litellm_model_string(model: ModelSpec) -> str:
 
     # Route through OpenRouter
     return f"openrouter/{model.model_id}"
+
+
+# Maps model_id → LiteLLM proxy alias name (from litellm_config.yaml).
+# A unit test asserts these keys stay in sync with the model registry.
+_PROXY_MODEL_MAP: dict[str, str] = {
+    "qwen/qwen3-coder:free": "silkroute-free-coder",
+    "deepseek/deepseek-r1-0528:free": "silkroute-free-reasoning",
+    "z-ai/glm-4.5-air:free": "silkroute-free-general",
+    "deepseek/deepseek-v3.2": "silkroute-standard",
+    "qwen/qwen3-235b-a22b-2507": "silkroute-standard-fallback",
+    "z-ai/glm-4.7": "silkroute-standard-tools",
+    "qwen/qwen3-30b-a3b": "silkroute-standard-light",
+    "deepseek/deepseek-r1-0528": "silkroute-premium",
+    "qwen/qwen3-coder": "silkroute-premium-code",
+    "z-ai/glm-5": "silkroute-premium-agent",
+    "moonshotai/kimi-k2": "silkroute-premium-multiagent",
+}
+
+
+def _use_litellm_proxy() -> bool:
+    """Check if LiteLLM proxy mode is enabled."""
+    return ProviderConfig().use_litellm_proxy
 
 
 _PROVIDER_ENV_KEYS: dict[Provider, str] = {

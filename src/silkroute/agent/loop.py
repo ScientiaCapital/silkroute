@@ -2,10 +2,14 @@
 
 Orchestrates classification, model selection, tool execution, cost tracking,
 and Rich terminal output for a single agent run.
+
+Database persistence is optional: if PostgreSQL is unavailable, the agent
+continues running and logs a warning. All DB calls are wrapped in try/except.
 """
 
 from __future__ import annotations
 
+import asyncio
 import os
 import time
 from pathlib import Path
@@ -23,7 +27,7 @@ from silkroute.agent.prompts import build_system_prompt
 from silkroute.agent.router import get_litellm_model_string, select_model
 from silkroute.agent.session import AgentSession, Iteration, SessionStatus, ToolCall
 from silkroute.agent.tools import create_default_registry, parse_tool_arguments
-from silkroute.config.settings import BudgetConfig, ModelTier
+from silkroute.config.settings import AgentConfig, BudgetConfig, ModelTier
 from silkroute.providers.models import ModelSpec, estimate_cost
 
 log = structlog.get_logger()
@@ -75,6 +79,41 @@ async def run_agent(
         project_id=project_id,
         budget_limit_usd=budget_limit_usd,
     )
+
+    # Step 3b: Database persistence (optional — non-fatal if Postgres unavailable)
+    pool = None
+    persist = AgentConfig().persist_sessions
+    if persist:
+        try:
+            from silkroute.db.pool import get_pool
+
+            pool = await get_pool()
+        except Exception as exc:
+            log.warning("db_init_skipped", error=str(exc))
+
+    if pool is not None:
+        try:
+            from silkroute.db.repositories import projects as db_projects
+            from silkroute.db.repositories import sessions as db_sessions
+
+            await db_sessions.create_session(pool, session)
+
+            # Check real monthly spend against project budget
+            monthly_spend = await db_projects.get_monthly_spend(pool, project_id)
+            project_budget = await db_projects.get_project_budget(pool, project_id)
+            if project_budget is not None and monthly_spend >= project_budget:
+                console.print(
+                    f"  [red]Project budget exceeded: "
+                    f"${monthly_spend:.2f} / ${project_budget:.2f}[/red]"
+                )
+                session.complete(SessionStatus.BUDGET_EXCEEDED)
+                await db_sessions.close_session(pool, session)
+                return session
+        except Exception as exc:
+            log.warning("db_session_init_failed", error=str(exc))
+            pool = None  # Disable DB for this run
+
+    pending_db_tasks: list[asyncio.Task[None]] = []
 
     # Step 4: Set up tools and system prompt
     registry = create_default_registry()
@@ -173,6 +212,7 @@ async def run_agent(
         tool_calls_raw = assistant_msg.tool_calls
         if not tool_calls_raw:
             session.add_iteration(iteration)
+            _schedule_db_writes(pool, pending_db_tasks, session, iteration, model)
             messages.append({"role": "assistant", "content": thought})
             session.complete(SessionStatus.COMPLETED)
             console.print("\n  [bold green]Task completed.[/bold green]")
@@ -217,6 +257,7 @@ async def run_agent(
 
         iteration.tool_calls = tool_call_records
         session.add_iteration(iteration)
+        _schedule_db_writes(pool, pending_db_tasks, session, iteration, model)
 
         log.info(
             "iteration_complete",
@@ -229,6 +270,17 @@ async def run_agent(
         # Loop exhausted without completion
         session.complete(SessionStatus.TIMEOUT)
         console.print(f"\n  [yellow]Max iterations ({max_iterations}) reached.[/yellow]")
+
+    # Flush pending DB writes and close session
+    if pending_db_tasks:
+        await asyncio.gather(*pending_db_tasks, return_exceptions=True)
+    if pool is not None:
+        try:
+            from silkroute.db.repositories import sessions as db_sessions
+
+            await db_sessions.close_session(pool, session)
+        except Exception as exc:
+            log.warning("db_session_close_failed", error=str(exc))
 
     # Summary panel
     console.print()
@@ -298,3 +350,28 @@ def _truncate_args(args: dict) -> str:
             sv = sv[:60] + "..."
         parts.append(f"{k}={sv!r}")
     return ", ".join(parts)
+
+
+def _schedule_db_writes(
+    pool: object | None,
+    pending: list[asyncio.Task[None]],
+    session: AgentSession,
+    iteration: Iteration,
+    model: ModelSpec,
+) -> None:
+    """Fire-and-forget DB writes for the current iteration.
+
+    Appends tasks to *pending* so they can be awaited before returning.
+    """
+    if pool is None:
+        return
+    try:
+        from silkroute.db.repositories import cost_logs as db_cost_logs
+        from silkroute.db.repositories import sessions as db_sessions
+
+        pending.append(asyncio.create_task(db_sessions.update_session(pool, session)))
+        pending.append(asyncio.create_task(
+            db_cost_logs.insert_cost_log(pool, session, iteration, model),
+        ))
+    except Exception as exc:
+        log.warning("db_write_schedule_failed", error=str(exc))

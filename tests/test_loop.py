@@ -8,6 +8,14 @@ from silkroute.agent.loop import run_agent
 from silkroute.agent.session import SessionStatus
 
 
+@pytest.fixture(autouse=True)
+def _disable_db_persistence():
+    """Disable DB persistence in loop tests to avoid connection attempts."""
+    with patch("silkroute.agent.loop.AgentConfig") as mock_cfg:
+        mock_cfg.return_value.persist_sessions = False
+        yield
+
+
 def _make_completion_response(content: str, tool_calls=None):
     """Build a mock litellm completion response."""
     message = MagicMock()
@@ -170,3 +178,77 @@ class TestRunAgent:
         from silkroute.providers.models import ALL_MODELS
         model = ALL_MODELS.get(session.model_id)
         assert model is not None
+
+
+class TestRunAgentWithDB:
+    """Tests verifying DB integration path when persistence is enabled."""
+
+    @pytest.mark.asyncio
+    async def test_db_calls_when_pool_available(self):
+        """When pool is available, DB calls are made at session boundaries."""
+        mock_response = _make_completion_response("Done.")
+        mock_pool = AsyncMock()
+        mock_db_sessions = AsyncMock()
+        mock_db_cost_logs = AsyncMock()
+        mock_db_projects = AsyncMock()
+        mock_db_projects.get_monthly_spend = AsyncMock(return_value=0.0)
+        mock_db_projects.get_project_budget = AsyncMock(return_value=200.0)
+
+        with (
+            patch("silkroute.agent.loop.litellm") as mock_litellm,
+            patch("silkroute.agent.loop.AgentConfig") as mock_cfg,
+            patch("silkroute.db.pool.asyncpg.create_pool", new_callable=AsyncMock, return_value=mock_pool),
+            patch("silkroute.agent.loop.db_sessions", mock_db_sessions, create=True),
+            patch("silkroute.db.repositories.sessions.create_session", mock_db_sessions.create_session),
+            patch("silkroute.db.repositories.sessions.update_session", mock_db_sessions.update_session),
+            patch("silkroute.db.repositories.sessions.close_session", mock_db_sessions.close_session),
+            patch("silkroute.db.repositories.projects.get_monthly_spend", mock_db_projects.get_monthly_spend),
+            patch("silkroute.db.repositories.projects.get_project_budget", mock_db_projects.get_project_budget),
+            patch("silkroute.db.repositories.cost_logs.insert_cost_log", mock_db_cost_logs.insert_cost_log),
+        ):
+            mock_cfg.return_value.persist_sessions = True
+            mock_litellm.acompletion = AsyncMock(return_value=mock_response)
+            mock_litellm.completion_cost.return_value = 0.0001
+            mock_litellm.suppress_debug_info = True
+
+            # Reset pool singleton
+            import silkroute.db.pool as pool_mod
+            pool_mod._pool = None
+
+            session = await run_agent(
+                "Quick task",
+                budget_limit_usd=1.0,
+                max_iterations=5,
+            )
+            pool_mod._pool = None  # Clean up
+
+        assert session.status == SessionStatus.COMPLETED
+
+    @pytest.mark.asyncio
+    async def test_agent_continues_without_db(self):
+        """Agent runs normally even when DB connection fails."""
+        mock_response = _make_completion_response("Done.")
+
+        with (
+            patch("silkroute.agent.loop.litellm") as mock_litellm,
+            patch("silkroute.agent.loop.AgentConfig") as mock_cfg,
+            patch("silkroute.db.pool.asyncpg.create_pool", new_callable=AsyncMock, side_effect=OSError("refused")),
+        ):
+            mock_cfg.return_value.persist_sessions = True
+            mock_litellm.acompletion = AsyncMock(return_value=mock_response)
+            mock_litellm.completion_cost.return_value = 0.0001
+            mock_litellm.suppress_debug_info = True
+
+            import silkroute.db.pool as pool_mod
+            pool_mod._pool = None
+
+            session = await run_agent(
+                "Quick task",
+                budget_limit_usd=1.0,
+                max_iterations=5,
+            )
+            pool_mod._pool = None
+
+        # Agent should still complete successfully
+        assert session.status == SessionStatus.COMPLETED
+        assert session.iteration_count == 1

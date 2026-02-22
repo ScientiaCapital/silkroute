@@ -57,6 +57,12 @@ class ProviderConfig(BaseSettings):
         description="Enable Ollama for local model routing",
     )
 
+    # LiteLLM proxy
+    use_litellm_proxy: bool = Field(
+        default=False,
+        description="Route through LiteLLM proxy at localhost:4000",
+    )
+
 
 class BudgetConfig(BaseSettings):
     """Per-project and global budget governance."""
