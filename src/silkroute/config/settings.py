@@ -6,16 +6,13 @@ Chinese model providers are configured as first-class defaults.
 
 from __future__ import annotations
 
-import os
-from enum import Enum
-from pathlib import Path
-from typing import Any
+from enum import StrEnum
 
 from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
-class ModelTier(str, Enum):
+class ModelTier(StrEnum):
     """LLM routing tiers — maps task complexity to cost level."""
 
     FREE = "free"
@@ -23,7 +20,7 @@ class ModelTier(str, Enum):
     PREMIUM = "premium"
 
 
-class HardwareProfile(str, Enum):
+class HardwareProfile(StrEnum):
     """Deployment hardware profiles for resource allocation."""
 
     MAC_MINI = "mac-mini"
@@ -134,6 +131,16 @@ class DaemonConfig(BaseSettings):
     webhook_port: int = Field(default=8787, description="GitHub webhook listener port")
     max_concurrent_sessions: int = Field(default=3, description="Parallel agent sessions")
 
+    # Unix socket and PID file paths
+    socket_path: str = Field(
+        default="~/.silkroute/daemon.sock",
+        description="Unix socket path for daemon IPC",
+    )
+    pid_file: str = Field(
+        default="~/.silkroute/daemon.pid",
+        description="PID file to prevent duplicate daemon instances",
+    )
+
     # Scheduled tasks
     nightly_scan_enabled: bool = Field(default=True, description="Run nightly repo scans")
     nightly_scan_cron: str = Field(default="0 3 * * *", description="Cron for nightly scan (3 AM)")
@@ -188,7 +195,7 @@ class SilkRouteSettings(BaseSettings):
     )
 
     @model_validator(mode="after")
-    def validate_at_least_one_provider(self) -> "SilkRouteSettings":
+    def validate_at_least_one_provider(self) -> SilkRouteSettings:
         """Ensure at least one LLM provider is configured."""
         has_provider = any([
             self.providers.openrouter_api_key,

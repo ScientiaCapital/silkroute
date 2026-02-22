@@ -43,6 +43,7 @@ async def run_agent(
     max_iterations: int = 25,
     budget_limit_usd: float = 10.0,
     workspace_dir: str | None = None,
+    daemon_mode: bool = False,
 ) -> AgentSession:
     """Run the ReAct agent loop on a task.
 
@@ -57,20 +58,26 @@ async def run_agent(
     classification = classify_task(task)
     tier = ModelTier(tier_override) if tier_override else classification.tier
 
-    console.print(Panel(
-        f"[bold]{task}[/bold]\n\n"
-        f"Tier: [cyan]{tier.value}[/cyan]  "
-        f"Capabilities: [dim]{', '.join(c.value for c in classification.capabilities)}[/dim]\n"
-        f"Reason: [dim]{classification.reason}[/dim]",
-        title="[bold blue]SilkRoute Agent[/bold blue]",
-        border_style="blue",
-    ))
+    if not daemon_mode:
+        console.print(Panel(
+            f"[bold]{task}[/bold]\n\n"
+            f"Tier: [cyan]{tier.value}[/cyan]  "
+            f"Capabilities: [dim]{', '.join(c.value for c in classification.capabilities)}[/dim]\n"
+            f"Reason: [dim]{classification.reason}[/dim]",
+            title="[bold blue]SilkRoute Agent[/bold blue]",
+            border_style="blue",
+        ))
+    else:
+        log.info("agent_started", task=task[:200], tier=tier.value)
 
     # Step 2: Select model
     model = select_model(tier, classification.capabilities, model_override)
     model_string = get_litellm_model_string(model)
 
-    console.print(f"  Model: [bold green]{model.name}[/bold green] ({model_string})")
+    if not daemon_mode:
+        console.print(f"  Model: [bold green]{model.name}[/bold green] ({model_string})")
+    else:
+        log.info("model_selected", model=model.name, model_string=model_string)
 
     # Step 3: Initialize session
     session = AgentSession(
@@ -102,10 +109,17 @@ async def run_agent(
             monthly_spend = await db_projects.get_monthly_spend(pool, project_id)
             project_budget = await db_projects.get_project_budget(pool, project_id)
             if project_budget is not None and monthly_spend >= project_budget:
-                console.print(
-                    f"  [red]Project budget exceeded: "
-                    f"${monthly_spend:.2f} / ${project_budget:.2f}[/red]"
-                )
+                if not daemon_mode:
+                    console.print(
+                        f"  [red]Project budget exceeded: "
+                        f"${monthly_spend:.2f} / ${project_budget:.2f}[/red]"
+                    )
+                else:
+                    log.warning(
+                        "project_budget_exceeded",
+                        spend=monthly_spend,
+                        budget=project_budget,
+                    )
                 session.complete(SessionStatus.BUDGET_EXCEEDED)
                 await db_sessions.close_session(pool, session)
                 return session
@@ -140,23 +154,31 @@ async def run_agent(
     # Suppress litellm's verbose logging
     litellm.suppress_debug_info = True
 
-    console.print(
-        f"  Budget: [bold]${budget_limit_usd:.2f}[/bold]  "
-        f"Max iterations: [bold]{max_iterations}[/bold]\n"
-    )
+    if not daemon_mode:
+        console.print(
+            f"  Budget: [bold]${budget_limit_usd:.2f}[/bold]  "
+            f"Max iterations: [bold]{max_iterations}[/bold]\n"
+        )
 
     # Step 5: ReAct loop
     for i in range(1, max_iterations + 1):
-        console.print(Rule(f"[bold]Iteration {i}[/bold]", style="dim"))
+        if not daemon_mode:
+            console.print(Rule(f"[bold]Iteration {i}[/bold]", style="dim"))
 
         # Budget check
         budget_check = check_budget(session, model, budget_config)
         if not budget_check.allowed:
-            console.print(f"  [red]{budget_check.warning}[/red]")
+            if not daemon_mode:
+                console.print(f"  [red]{budget_check.warning}[/red]")
+            else:
+                log.warning("budget_exceeded", session_id=session.id, warning=budget_check.warning)
             session.complete(SessionStatus.BUDGET_EXCEEDED)
             break
         if budget_check.warning:
-            console.print(f"  [yellow]{budget_check.warning}[/yellow]")
+            if not daemon_mode:
+                console.print(f"  [yellow]{budget_check.warning}[/yellow]")
+            else:
+                log.warning("budget_warning", session_id=session.id, warning=budget_check.warning)
 
         # Update system prompt with current iteration context
         messages[0]["content"] = build_system_prompt(
@@ -180,7 +202,8 @@ async def run_agent(
             )
         except Exception as e:
             log.error("llm_call_failed", iteration=i, error=str(e))
-            console.print(f"  [red]LLM error: {e}[/red]")
+            if not daemon_mode:
+                console.print(f"  [red]LLM error: {e}[/red]")
             session.complete(SessionStatus.FAILED)
             break
 
@@ -204,7 +227,7 @@ async def run_agent(
             latency_ms=latency_ms,
         )
 
-        if thought:
+        if thought and not daemon_mode:
             trimmed = thought[:200] + ("..." if len(thought) > 200 else "")
             console.print(f"  [dim]Think:[/dim] {trimmed}")
 
@@ -215,7 +238,8 @@ async def run_agent(
             _schedule_db_writes(pool, pending_db_tasks, session, iteration, model)
             messages.append({"role": "assistant", "content": thought})
             session.complete(SessionStatus.COMPLETED)
-            console.print("\n  [bold green]Task completed.[/bold green]")
+            if not daemon_mode:
+                console.print("\n  [bold green]Task completed.[/bold green]")
             break
 
         # Execute tool calls
@@ -228,16 +252,18 @@ async def run_agent(
             tool_name = fn.name
             args = parse_tool_arguments(fn.arguments)
 
-            console.print(f"  [cyan]Tool:[/cyan] {tool_name}({_truncate_args(args)})")
+            if not daemon_mode:
+                console.print(f"  [cyan]Tool:[/cyan] {tool_name}({_truncate_args(args)})")
 
             tc_start = _now_ms()
             result = await registry.execute(tool_name, args)
             tc_duration = _now_ms() - tc_start
 
             success = not result.startswith("Error")
-            style = "green" if success else "red"
-            trimmed_result = result[:150] + ("..." if len(result) > 150 else "")
-            console.print(f"    [{style}]→ {trimmed_result}[/{style}]")
+            if not daemon_mode:
+                style = "green" if success else "red"
+                trimmed_result = result[:150] + ("..." if len(result) > 150 else "")
+                console.print(f"    [{style}]→ {trimmed_result}[/{style}]")
 
             tool_call_records.append(ToolCall(
                 tool_name=tool_name,
@@ -269,7 +295,8 @@ async def run_agent(
     else:
         # Loop exhausted without completion
         session.complete(SessionStatus.TIMEOUT)
-        console.print(f"\n  [yellow]Max iterations ({max_iterations}) reached.[/yellow]")
+        if not daemon_mode:
+            console.print(f"\n  [yellow]Max iterations ({max_iterations}) reached.[/yellow]")
 
     # Flush pending DB writes and close session
     if pending_db_tasks:
@@ -282,16 +309,25 @@ async def run_agent(
         except Exception as exc:
             log.warning("db_session_close_failed", error=str(exc))
 
-    # Summary panel
-    console.print()
-    console.print(Panel(
-        f"Status: [bold]{session.status.value}[/bold]\n"
-        f"Iterations: {session.iteration_count}\n"
-        f"Total cost: [green]${session.total_cost_usd:.4f}[/green]\n"
-        f"Tokens: {session.total_input_tokens:,} in / {session.total_output_tokens:,} out",
-        title="[bold]Session Summary[/bold]",
-        border_style="green" if session.status == SessionStatus.COMPLETED else "yellow",
-    ))
+    # Summary
+    if not daemon_mode:
+        console.print()
+        console.print(Panel(
+            f"Status: [bold]{session.status.value}[/bold]\n"
+            f"Iterations: {session.iteration_count}\n"
+            f"Total cost: [green]${session.total_cost_usd:.4f}[/green]\n"
+            f"Tokens: {session.total_input_tokens:,} in / {session.total_output_tokens:,} out",
+            title="[bold]Session Summary[/bold]",
+            border_style="green" if session.status == SessionStatus.COMPLETED else "yellow",
+        ))
+    else:
+        log.info(
+            "agent_completed",
+            session_id=session.id,
+            status=session.status.value,
+            iterations=session.iteration_count,
+            cost_usd=session.total_cost_usd,
+        )
 
     return session
 

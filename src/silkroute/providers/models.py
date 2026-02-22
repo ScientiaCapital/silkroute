@@ -10,12 +10,12 @@ Pricing data as of February 2026. Updated monthly.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
 
 from silkroute.config.settings import ModelTier
 
 
-class Provider(str, Enum):
+class Provider(StrEnum):
     """Chinese LLM providers."""
 
     DEEPSEEK = "deepseek"
@@ -26,7 +26,7 @@ class Provider(str, Enum):
     OLLAMA = "ollama"
 
 
-class Capability(str, Enum):
+class Capability(StrEnum):
     """Model capability flags for routing decisions."""
 
     CODING = "coding"

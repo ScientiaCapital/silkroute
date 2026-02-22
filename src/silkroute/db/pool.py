@@ -2,9 +2,14 @@
 
 Lazy-initialized on first access. Graceful failure: if PostgreSQL is
 unreachable, get_pool() returns None and callers skip DB operations.
+
+Thread-safe via asyncio.Lock — safe for concurrent access from daemon
+mode's 3 worker tasks.
 """
 
 from __future__ import annotations
+
+import asyncio
 
 import asyncpg
 import structlog
@@ -14,29 +19,36 @@ from silkroute.config.settings import DatabaseConfig
 log = structlog.get_logger()
 
 _pool: asyncpg.Pool | None = None
+_pool_lock: asyncio.Lock = asyncio.Lock()
 
 
 async def get_pool() -> asyncpg.Pool | None:
     """Return the shared connection pool, creating it on first call.
 
     Returns None if PostgreSQL is unreachable — callers must handle this.
+    Uses asyncio.Lock to prevent duplicate pool creation under concurrent access.
     """
     global _pool  # noqa: PLW0603
     if _pool is not None:
         return _pool
 
-    try:
-        cfg = DatabaseConfig()
-        _pool = await asyncpg.create_pool(
-            cfg.postgres_url,
-            min_size=1,
-            max_size=5,
-            command_timeout=10,
-        )
-        log.info("db_pool_created", postgres_url=_mask_url(cfg.postgres_url))
-    except (OSError, asyncpg.PostgresError) as exc:
-        log.warning("db_pool_failed", error=str(exc))
-        _pool = None
+    async with _pool_lock:
+        # Double-check after acquiring lock
+        if _pool is not None:
+            return _pool
+
+        try:
+            cfg = DatabaseConfig()
+            _pool = await asyncpg.create_pool(
+                cfg.postgres_url,
+                min_size=1,
+                max_size=5,
+                command_timeout=10,
+            )
+            log.info("db_pool_created", postgres_url=_mask_url(cfg.postgres_url))
+        except (OSError, asyncpg.PostgresError) as exc:
+            log.warning("db_pool_failed", error=str(exc))
+            _pool = None
 
     return _pool
 
