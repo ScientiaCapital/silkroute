@@ -1,10 +1,14 @@
-"""Tests for daemon task queue — submit, consume, drain, result tracking."""
+"""Tests for daemon task queue — submit, consume, drain, result tracking.
+
+Uses fakeredis for Redis-backed TaskQueue testing without a real server.
+"""
 
 from __future__ import annotations
 
 import asyncio
 from datetime import UTC, datetime
 
+import fakeredis.aioredis
 import pytest
 
 from silkroute.daemon.queue import TaskQueue, TaskRequest, TaskResult
@@ -83,24 +87,24 @@ class TestTaskResult:
 
 
 class TestTaskQueue:
-    """TaskQueue async tests."""
+    """TaskQueue async tests with fakeredis."""
 
     @pytest.mark.asyncio
-    async def test_submit_and_consume(self) -> None:
-        q = TaskQueue()
+    async def test_submit_and_consume(self, fake_redis: fakeredis.aioredis.FakeRedis) -> None:
+        q = TaskQueue(redis=fake_redis)
         req = TaskRequest(task="hello")
         rid = await q.submit(req)
         assert rid == req.id
-        assert q.pending_count() == 1
+        assert await q.pending_count() == 1
 
         consumed = await q.consume()
         assert consumed.id == req.id
         assert consumed.task == "hello"
-        assert q.pending_count() == 0
+        assert await q.pending_count() == 0
 
     @pytest.mark.asyncio
-    async def test_fifo_ordering(self) -> None:
-        q = TaskQueue()
+    async def test_fifo_ordering(self, fake_redis: fakeredis.aioredis.FakeRedis) -> None:
+        q = TaskQueue(redis=fake_redis)
         r1 = TaskRequest(task="first")
         r2 = TaskRequest(task="second")
         r3 = TaskRequest(task="third")
@@ -113,25 +117,26 @@ class TestTaskQueue:
         assert (await q.consume()).task == "third"
 
     @pytest.mark.asyncio
-    async def test_consume_blocks_until_available(self) -> None:
-        q = TaskQueue()
-        consumed: list[TaskRequest] = []
-
-        async def consumer() -> None:
-            consumed.append(await q.consume())
-
-        task = asyncio.create_task(consumer())
-        await asyncio.sleep(0.05)
-        assert consumed == []  # Still waiting
-
-        await q.submit(TaskRequest(task="delayed"))
-        await task
-        assert len(consumed) == 1
-        assert consumed[0].task == "delayed"
+    async def test_consume_returns_none_on_timeout(
+        self, fake_redis: fakeredis.aioredis.FakeRedis
+    ) -> None:
+        q = TaskQueue(redis=fake_redis)
+        result = await q.consume(timeout=0.1)
+        assert result is None
 
     @pytest.mark.asyncio
-    async def test_record_and_get_result(self) -> None:
-        q = TaskQueue()
+    async def test_consume_returns_task_when_available(
+        self, fake_redis: fakeredis.aioredis.FakeRedis
+    ) -> None:
+        q = TaskQueue(redis=fake_redis)
+        await q.submit(TaskRequest(task="ready"))
+        result = await q.consume(timeout=1.0)
+        assert result is not None
+        assert result.task == "ready"
+
+    @pytest.mark.asyncio
+    async def test_record_and_get_result(self, fake_redis: fakeredis.aioredis.FakeRedis) -> None:
+        q = TaskQueue(redis=fake_redis)
         result = TaskResult(
             request_id="req-1",
             session_id="sess-1",
@@ -140,13 +145,18 @@ class TestTaskQueue:
             iterations=2,
             duration_ms=5000,
         )
-        q.record_result(result)
-        assert q.get_result("req-1") is result
-        assert q.get_result("nonexistent") is None
+        await q.record_result(result)
+        got = await q.get_result("req-1")
+        assert got is not None
+        assert got.request_id == result.request_id
+        assert got.status == result.status
+        assert await q.get_result("nonexistent") is None
 
     @pytest.mark.asyncio
-    async def test_get_result_returns_latest(self) -> None:
-        q = TaskQueue()
+    async def test_get_result_returns_latest(
+        self, fake_redis: fakeredis.aioredis.FakeRedis
+    ) -> None:
+        q = TaskQueue(redis=fake_redis)
         r1 = TaskResult(
             request_id="req-1", session_id="s1", status="failed",
             cost_usd=0.01, iterations=1, duration_ms=100, error="boom",
@@ -155,71 +165,128 @@ class TestTaskQueue:
             request_id="req-1", session_id="s2", status="completed",
             cost_usd=0.03, iterations=3, duration_ms=9000,
         )
-        q.record_result(r1)
-        q.record_result(r2)
-        assert q.get_result("req-1") is r2
+        await q.record_result(r1)
+        await q.record_result(r2)
+        got = await q.get_result("req-1")
+        assert got is not None
+        assert got.status == "completed"
+        assert got.session_id == "s2"
 
     @pytest.mark.asyncio
-    async def test_drain(self) -> None:
-        q = TaskQueue()
+    async def test_drain(self, fake_redis: fakeredis.aioredis.FakeRedis) -> None:
+        q = TaskQueue(redis=fake_redis)
         await q.submit(TaskRequest(task="a"))
         await q.submit(TaskRequest(task="b"))
         await q.submit(TaskRequest(task="c"))
-        assert q.pending_count() == 3
+        assert await q.pending_count() == 3
 
         drained = await q.drain()
         assert len(drained) == 3
-        assert q.pending_count() == 0
+        assert await q.pending_count() == 0
         assert [d.task for d in drained] == ["a", "b", "c"]
 
     @pytest.mark.asyncio
-    async def test_drain_empty_queue(self) -> None:
-        q = TaskQueue()
+    async def test_drain_empty_queue(self, fake_redis: fakeredis.aioredis.FakeRedis) -> None:
+        q = TaskQueue(redis=fake_redis)
         drained = await q.drain()
         assert drained == []
 
     @pytest.mark.asyncio
-    async def test_total_submitted_counter(self) -> None:
-        q = TaskQueue()
+    async def test_total_submitted_counter(
+        self, fake_redis: fakeredis.aioredis.FakeRedis
+    ) -> None:
+        q = TaskQueue(redis=fake_redis)
         assert q.total_submitted == 0
         await q.submit(TaskRequest(task="a"))
         await q.submit(TaskRequest(task="b"))
         assert q.total_submitted == 2
 
     @pytest.mark.asyncio
-    async def test_total_completed_counter(self) -> None:
-        q = TaskQueue()
+    async def test_total_completed_counter(
+        self, fake_redis: fakeredis.aioredis.FakeRedis
+    ) -> None:
+        q = TaskQueue(redis=fake_redis)
         assert q.total_completed == 0
-        q.record_result(TaskResult(
+        await q.record_result(TaskResult(
             request_id="r1", session_id="s1", status="completed",
             cost_usd=0.01, iterations=1, duration_ms=100,
         ))
-        q.record_result(TaskResult(
+        await q.record_result(TaskResult(
             request_id="r2", session_id="s2", status="failed",
             cost_usd=0.02, iterations=2, duration_ms=200,
         ))
         assert q.total_completed == 2
 
     @pytest.mark.asyncio
-    async def test_maxsize_backpressure(self) -> None:
-        q = TaskQueue(maxsize=2)
+    async def test_maxsize_backpressure(self, fake_redis: fakeredis.aioredis.FakeRedis) -> None:
+        q = TaskQueue(redis=fake_redis, maxsize=2)
         await q.submit(TaskRequest(task="a"))
         await q.submit(TaskRequest(task="b"))
-        # Third submit should block
-        blocked = False
-
-        async def try_submit() -> None:
-            nonlocal blocked
-            blocked = True
+        # Third submit should raise — queue full
+        with pytest.raises(RuntimeError, match="Queue full"):
             await q.submit(TaskRequest(task="c"))
-            blocked = False
 
-        task = asyncio.create_task(try_submit())
-        await asyncio.sleep(0.05)
-        assert blocked  # Still waiting — queue full
+    @pytest.mark.asyncio
+    async def test_init_counters_from_redis(
+        self, fake_redis: fakeredis.aioredis.FakeRedis
+    ) -> None:
+        """Counters should initialize from Redis values (crash recovery)."""
+        await fake_redis.set("silkroute:counter:submitted", "42")
+        await fake_redis.set("silkroute:counter:completed", "37")
 
-        await q.consume()  # Free up space
-        await asyncio.sleep(0.05)
-        assert not blocked  # Submit completed
-        await task
-        assert q.pending_count() == 2  # b + c remain
+        q = TaskQueue(redis=fake_redis)
+        await q.init_counters()
+        assert q.total_submitted == 42
+        assert q.total_completed == 37
+
+    @pytest.mark.asyncio
+    async def test_init_counters_defaults_to_zero(
+        self, fake_redis: fakeredis.aioredis.FakeRedis
+    ) -> None:
+        """Counters should default to 0 when Redis has no values."""
+        q = TaskQueue(redis=fake_redis)
+        await q.init_counters()
+        assert q.total_submitted == 0
+        assert q.total_completed == 0
+
+    @pytest.mark.asyncio
+    async def test_counters_persist_in_redis(
+        self, fake_redis: fakeredis.aioredis.FakeRedis
+    ) -> None:
+        """Submit and record_result should INCR Redis counters."""
+        q = TaskQueue(redis=fake_redis)
+        await q.submit(TaskRequest(task="a"))
+        await q.record_result(TaskResult(
+            request_id="r1", session_id="s1", status="completed",
+            cost_usd=0.01, iterations=1, duration_ms=100,
+        ))
+
+        assert await fake_redis.get("silkroute:counter:submitted") == "1"
+        assert await fake_redis.get("silkroute:counter:completed") == "1"
+
+    @pytest.mark.asyncio
+    async def test_submit_preserves_all_fields(
+        self, fake_redis: fakeredis.aioredis.FakeRedis
+    ) -> None:
+        """All TaskRequest fields should survive the Redis round-trip."""
+        q = TaskQueue(redis=fake_redis)
+        original = TaskRequest(
+            task="complex task",
+            project_id="proj-1",
+            model_override="deepseek/deepseek-r1-0528",
+            tier_override="premium",
+            max_iterations=50,
+            budget_limit_usd=25.0,
+            priority=5,
+        )
+        await q.submit(original)
+        consumed = await q.consume()
+
+        assert consumed.task == original.task
+        assert consumed.id == original.id
+        assert consumed.project_id == original.project_id
+        assert consumed.model_override == original.model_override
+        assert consumed.tier_override == original.tier_override
+        assert consumed.max_iterations == original.max_iterations
+        assert consumed.budget_limit_usd == original.budget_limit_usd
+        assert consumed.priority == original.priority

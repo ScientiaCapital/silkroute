@@ -1,7 +1,7 @@
 """Daemon lifecycle management — startup, shutdown, PID file locking.
 
 Orchestrates the initialization and teardown of all daemon subsystems:
-DB pool, PID file, socket cleanup, and graceful worker drain.
+Redis pool, DB pool, PID file, socket cleanup, and graceful worker drain.
 """
 
 from __future__ import annotations
@@ -12,6 +12,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 
+import redis.asyncio as aioredis
 import structlog
 
 from silkroute.daemon.queue import TaskQueue
@@ -25,6 +26,7 @@ class DaemonContext:
 
     pid_file: Path
     socket_path: Path
+    redis: aioredis.Redis | None = None
     pool: object | None = None  # asyncpg.Pool or None
     started_at: datetime = field(default_factory=lambda: datetime.now(UTC))
 
@@ -84,6 +86,17 @@ async def startup(
     pid_file.write_text(str(os.getpid()))
     log.info("pid_file_written", pid=os.getpid(), path=str(pid_file))
 
+    # Initialize Redis (required — daemon cannot function without it)
+    from silkroute.daemon.redis_pool import get_redis
+
+    redis_client = await get_redis()
+    if redis_client is None:
+        raise RuntimeError(
+            "Redis is unreachable. The daemon requires Redis for task queue persistence. "
+            "Start Redis with 'docker compose up -d redis' or check SILKROUTE_DB_REDIS_URL."
+        )
+    log.info("redis_connected")
+
     # Initialize DB pool (optional, graceful failure)
     pool = None
     if init_db:
@@ -101,6 +114,7 @@ async def startup(
     return DaemonContext(
         pid_file=pid_file,
         socket_path=sock_path,
+        redis=redis_client,
         pool=pool,
     )
 
@@ -131,6 +145,16 @@ async def shutdown(
                 for task in pending:
                     task.cancel()
                 await asyncio.gather(*pending, return_exceptions=True)
+
+    # Close Redis
+    if context.redis is not None:
+        try:
+            from silkroute.daemon.redis_pool import close_redis
+
+            await close_redis()
+            log.info("redis_closed")
+        except Exception as exc:
+            log.warning("redis_close_failed", error=str(exc))
 
     # Close DB pool
     if context.pool is not None:

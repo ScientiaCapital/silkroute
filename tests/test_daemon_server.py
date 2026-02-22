@@ -4,13 +4,13 @@ from __future__ import annotations
 
 import asyncio
 import json
-import os
-import tempfile
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import fakeredis.aioredis
 import pytest
 
+from silkroute.daemon.queue import TaskQueue
 from silkroute.daemon.server import DaemonServer
 
 
@@ -24,20 +24,32 @@ def _make_config(tmp_path: Path) -> object:
     return config
 
 
+async def _make_server_with_queue(
+    tmp_path: Path,
+    fake_redis: fakeredis.aioredis.FakeRedis,
+) -> DaemonServer:
+    """Create a DaemonServer with a Redis-backed queue for testing."""
+    config = _make_config(tmp_path)
+    server = DaemonServer(config)
+    server._queue = TaskQueue(redis=fake_redis)
+    return server
+
+
 class TestDaemonServer:
     """DaemonServer unit tests."""
 
     def test_init(self, tmp_path: Path) -> None:
         config = _make_config(tmp_path)
         server = DaemonServer(config)
-        assert server._queue is not None
+        assert server._queue is None  # Deferred to run()
         assert not server._shutdown_event.is_set()
         assert server._workers == []
 
     @pytest.mark.asyncio
-    async def test_handle_submit(self, tmp_path: Path) -> None:
-        config = _make_config(tmp_path)
-        server = DaemonServer(config)
+    async def test_handle_submit(
+        self, tmp_path: Path, fake_redis: fakeredis.aioredis.FakeRedis
+    ) -> None:
+        server = await _make_server_with_queue(tmp_path, fake_redis)
 
         response = await server._handle_submit({
             "task": {"task": "review code", "project_id": "myproject"},
@@ -45,12 +57,13 @@ class TestDaemonServer:
 
         assert response["ok"] is True
         assert "id" in response
-        assert server._queue.pending_count() == 1
+        assert await server._queue.pending_count() == 1
 
     @pytest.mark.asyncio
-    async def test_handle_submit_string_task(self, tmp_path: Path) -> None:
-        config = _make_config(tmp_path)
-        server = DaemonServer(config)
+    async def test_handle_submit_string_task(
+        self, tmp_path: Path, fake_redis: fakeredis.aioredis.FakeRedis
+    ) -> None:
+        server = await _make_server_with_queue(tmp_path, fake_redis)
 
         response = await server._handle_submit({
             "task": "just a string task",
@@ -59,20 +72,23 @@ class TestDaemonServer:
         assert response["ok"] is True
 
     @pytest.mark.asyncio
-    async def test_handle_submit_missing_task(self, tmp_path: Path) -> None:
-        config = _make_config(tmp_path)
-        server = DaemonServer(config)
+    async def test_handle_submit_missing_task(
+        self, tmp_path: Path, fake_redis: fakeredis.aioredis.FakeRedis
+    ) -> None:
+        server = await _make_server_with_queue(tmp_path, fake_redis)
 
         response = await server._handle_submit({"task": {}})
 
         assert response["ok"] is False
         assert "Missing" in response["error"]
 
-    def test_handle_status(self, tmp_path: Path) -> None:
-        config = _make_config(tmp_path)
-        server = DaemonServer(config)
+    @pytest.mark.asyncio
+    async def test_handle_status(
+        self, tmp_path: Path, fake_redis: fakeredis.aioredis.FakeRedis
+    ) -> None:
+        server = await _make_server_with_queue(tmp_path, fake_redis)
 
-        status = server._handle_status()
+        status = await server._handle_status()
 
         assert status["running"] is True
         assert status["pending"] == 0
@@ -90,9 +106,10 @@ class TestDaemonServer:
         assert server._shutdown_event.is_set()
 
     @pytest.mark.asyncio
-    async def test_handle_client_submit(self, tmp_path: Path) -> None:
-        config = _make_config(tmp_path)
-        server = DaemonServer(config)
+    async def test_handle_client_submit(
+        self, tmp_path: Path, fake_redis: fakeredis.aioredis.FakeRedis
+    ) -> None:
+        server = await _make_server_with_queue(tmp_path, fake_redis)
 
         # Simulate reader/writer
         msg = json.dumps({"action": "submit", "task": {"task": "test"}}).encode()
@@ -112,9 +129,10 @@ class TestDaemonServer:
         assert response["ok"] is True
 
     @pytest.mark.asyncio
-    async def test_handle_client_status(self, tmp_path: Path) -> None:
-        config = _make_config(tmp_path)
-        server = DaemonServer(config)
+    async def test_handle_client_status(
+        self, tmp_path: Path, fake_redis: fakeredis.aioredis.FakeRedis
+    ) -> None:
+        server = await _make_server_with_queue(tmp_path, fake_redis)
 
         msg = json.dumps({"action": "status"}).encode()
         reader = AsyncMock()
@@ -132,9 +150,10 @@ class TestDaemonServer:
         assert response["running"] is True
 
     @pytest.mark.asyncio
-    async def test_handle_client_invalid_json(self, tmp_path: Path) -> None:
-        config = _make_config(tmp_path)
-        server = DaemonServer(config)
+    async def test_handle_client_invalid_json(
+        self, tmp_path: Path, fake_redis: fakeredis.aioredis.FakeRedis
+    ) -> None:
+        server = await _make_server_with_queue(tmp_path, fake_redis)
 
         reader = AsyncMock()
         reader.read = AsyncMock(return_value=b"not json")
@@ -152,9 +171,10 @@ class TestDaemonServer:
         assert "Invalid JSON" in response["error"]
 
     @pytest.mark.asyncio
-    async def test_handle_client_unknown_action(self, tmp_path: Path) -> None:
-        config = _make_config(tmp_path)
-        server = DaemonServer(config)
+    async def test_handle_client_unknown_action(
+        self, tmp_path: Path, fake_redis: fakeredis.aioredis.FakeRedis
+    ) -> None:
+        server = await _make_server_with_queue(tmp_path, fake_redis)
 
         msg = json.dumps({"action": "unknown"}).encode()
         reader = AsyncMock()
@@ -173,9 +193,10 @@ class TestDaemonServer:
         assert "Unknown action" in response["error"]
 
     @pytest.mark.asyncio
-    async def test_handle_client_empty_data(self, tmp_path: Path) -> None:
-        config = _make_config(tmp_path)
-        server = DaemonServer(config)
+    async def test_handle_client_empty_data(
+        self, tmp_path: Path, fake_redis: fakeredis.aioredis.FakeRedis
+    ) -> None:
+        server = await _make_server_with_queue(tmp_path, fake_redis)
 
         reader = AsyncMock()
         reader.read = AsyncMock(return_value=b"")
@@ -196,9 +217,10 @@ class TestDaemonServer:
         assert server._shutdown_event.is_set()
 
     @pytest.mark.asyncio
-    async def test_submit_with_all_options(self, tmp_path: Path) -> None:
-        config = _make_config(tmp_path)
-        server = DaemonServer(config)
+    async def test_submit_with_all_options(
+        self, tmp_path: Path, fake_redis: fakeredis.aioredis.FakeRedis
+    ) -> None:
+        server = await _make_server_with_queue(tmp_path, fake_redis)
 
         response = await server._handle_submit({
             "task": {
@@ -220,3 +242,20 @@ class TestDaemonServer:
         assert consumed.tier_override == "premium"
         assert consumed.max_iterations == 50
         assert consumed.budget_limit_usd == 25.0
+
+    @pytest.mark.asyncio
+    async def test_status_includes_scheduler_jobs(
+        self, tmp_path: Path, fake_redis: fakeredis.aioredis.FakeRedis
+    ) -> None:
+        server = await _make_server_with_queue(tmp_path, fake_redis)
+
+        # Add a mock scheduler
+        mock_scheduler = MagicMock()
+        mock_scheduler.get_jobs.return_value = [
+            {"id": "nightly_scan", "name": "Nightly scan", "next_run": None},
+        ]
+        server._scheduler = mock_scheduler
+
+        status = await server._handle_status()
+        assert "scheduler_jobs" in status
+        assert len(status["scheduler_jobs"]) == 1

@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 from unittest.mock import patch
 
+import fakeredis.aioredis
 import pytest
 
 from silkroute.daemon.heartbeat import HeartbeatTicker
@@ -15,8 +16,8 @@ class TestHeartbeatTicker:
     """HeartbeatTicker lifecycle and emission tests."""
 
     @pytest.mark.asyncio
-    async def test_start_creates_task(self) -> None:
-        q = TaskQueue()
+    async def test_start_creates_task(self, fake_redis: fakeredis.aioredis.FakeRedis) -> None:
+        q = TaskQueue(redis=fake_redis)
         ticker = HeartbeatTicker(interval=60, queue=q)
         ticker.start()
         assert ticker.is_running
@@ -24,8 +25,8 @@ class TestHeartbeatTicker:
         assert not ticker.is_running
 
     @pytest.mark.asyncio
-    async def test_stop_is_idempotent(self) -> None:
-        q = TaskQueue()
+    async def test_stop_is_idempotent(self, fake_redis: fakeredis.aioredis.FakeRedis) -> None:
+        q = TaskQueue(redis=fake_redis)
         ticker = HeartbeatTicker(interval=60, queue=q)
         ticker.start()
         await ticker.stop()
@@ -33,14 +34,14 @@ class TestHeartbeatTicker:
         assert not ticker.is_running
 
     @pytest.mark.asyncio
-    async def test_stop_without_start(self) -> None:
-        q = TaskQueue()
+    async def test_stop_without_start(self, fake_redis: fakeredis.aioredis.FakeRedis) -> None:
+        q = TaskQueue(redis=fake_redis)
         ticker = HeartbeatTicker(interval=60, queue=q)
         await ticker.stop()  # Should not raise
 
     @pytest.mark.asyncio
-    async def test_heartbeat_emits_log(self) -> None:
-        q = TaskQueue()
+    async def test_heartbeat_emits_log(self, fake_redis: fakeredis.aioredis.FakeRedis) -> None:
+        q = TaskQueue(redis=fake_redis)
         ticker = HeartbeatTicker(interval=0.05, queue=q)
 
         with patch("silkroute.daemon.heartbeat.log") as mock_log:
@@ -56,8 +57,10 @@ class TestHeartbeatTicker:
         assert len(heartbeat_calls) >= 1
 
     @pytest.mark.asyncio
-    async def test_heartbeat_includes_queue_metrics(self) -> None:
-        q = TaskQueue()
+    async def test_heartbeat_includes_queue_metrics(
+        self, fake_redis: fakeredis.aioredis.FakeRedis
+    ) -> None:
+        q = TaskQueue(redis=fake_redis)
         ticker = HeartbeatTicker(interval=0.05, queue=q)
 
         with patch("silkroute.daemon.heartbeat.log") as mock_log:
@@ -80,8 +83,10 @@ class TestHeartbeatTicker:
         assert "rss_mb" in kwargs
 
     @pytest.mark.asyncio
-    async def test_active_workers_fn_called(self) -> None:
-        q = TaskQueue()
+    async def test_active_workers_fn_called(
+        self, fake_redis: fakeredis.aioredis.FakeRedis
+    ) -> None:
+        q = TaskQueue(redis=fake_redis)
         ticker = HeartbeatTicker(
             interval=0.05,
             queue=q,
@@ -101,8 +106,10 @@ class TestHeartbeatTicker:
         assert heartbeat_calls[0].kwargs["active_workers"] == 2
 
     @pytest.mark.asyncio
-    async def test_is_running_reflects_task_state(self) -> None:
-        q = TaskQueue()
+    async def test_is_running_reflects_task_state(
+        self, fake_redis: fakeredis.aioredis.FakeRedis
+    ) -> None:
+        q = TaskQueue(redis=fake_redis)
         ticker = HeartbeatTicker(interval=60, queue=q)
         assert not ticker.is_running
         ticker.start()

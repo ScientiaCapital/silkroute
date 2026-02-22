@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import asyncio
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
+import fakeredis.aioredis
 import pytest
 
 from silkroute.daemon.queue import TaskQueue, TaskRequest, TaskResult
@@ -19,8 +20,6 @@ def _make_mock_session(
     iteration_count: int = 3,
 ) -> object:
     """Create a mock AgentSession for testing."""
-    from unittest.mock import MagicMock
-
     session = MagicMock()
     session.id = session_id
     session.status.value = status
@@ -95,8 +94,10 @@ class TestWorkerLoop:
     """worker_loop() tests."""
 
     @pytest.mark.asyncio
-    async def test_consumes_and_processes_task(self) -> None:
-        q = TaskQueue()
+    async def test_consumes_and_processes_task(
+        self, fake_redis: fakeredis.aioredis.FakeRedis
+    ) -> None:
+        q = TaskQueue(redis=fake_redis)
         shutdown = asyncio.Event()
         req = TaskRequest(task="test task")
         await q.submit(req)
@@ -115,13 +116,15 @@ class TestWorkerLoop:
             await worker_loop(worker_id=1, queue=q, shutdown_event=shutdown)
 
         assert q.total_completed == 1
-        result = q.get_result(req.id)
+        result = await q.get_result(req.id)
         assert result is not None
         assert result.status == "completed"
 
     @pytest.mark.asyncio
-    async def test_stops_on_shutdown_event(self) -> None:
-        q = TaskQueue()
+    async def test_stops_on_shutdown_event(
+        self, fake_redis: fakeredis.aioredis.FakeRedis
+    ) -> None:
+        q = TaskQueue(redis=fake_redis)
         shutdown = asyncio.Event()
         shutdown.set()  # Already set — worker should exit immediately
 
@@ -132,8 +135,10 @@ class TestWorkerLoop:
             )
 
     @pytest.mark.asyncio
-    async def test_handles_task_failure_gracefully(self) -> None:
-        q = TaskQueue()
+    async def test_handles_task_failure_gracefully(
+        self, fake_redis: fakeredis.aioredis.FakeRedis
+    ) -> None:
+        q = TaskQueue(redis=fake_redis)
         shutdown = asyncio.Event()
         req = TaskRequest(task="failing task")
         await q.submit(req)
@@ -149,14 +154,16 @@ class TestWorkerLoop:
             # Should not raise — failure is recorded as a result
             await worker_loop(worker_id=1, queue=q, shutdown_event=shutdown)
 
-        result = q.get_result(req.id)
+        result = await q.get_result(req.id)
         assert result is not None
         assert result.status == "failed"
         assert result.error == "boom"
 
     @pytest.mark.asyncio
-    async def test_processes_multiple_tasks(self) -> None:
-        q = TaskQueue()
+    async def test_processes_multiple_tasks(
+        self, fake_redis: fakeredis.aioredis.FakeRedis
+    ) -> None:
+        q = TaskQueue(redis=fake_redis)
         shutdown = asyncio.Event()
         r1 = TaskRequest(task="task 1")
         r2 = TaskRequest(task="task 2")
@@ -176,5 +183,5 @@ class TestWorkerLoop:
             await worker_loop(worker_id=1, queue=q, shutdown_event=shutdown)
 
         assert q.total_completed == 2
-        assert q.get_result(r1.id) is not None
-        assert q.get_result(r2.id) is not None
+        assert await q.get_result(r1.id) is not None
+        assert await q.get_result(r2.id) is not None

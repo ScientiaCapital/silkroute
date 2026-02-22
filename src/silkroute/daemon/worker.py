@@ -30,9 +30,8 @@ async def worker_loop(
     log.info("worker_started", worker_id=worker_id)
 
     while not shutdown_event.is_set():
-        try:
-            request = await asyncio.wait_for(queue.consume(), timeout=1.0)
-        except TimeoutError:
+        request = await queue.consume(timeout=1.0)
+        if request is None:
             continue  # Check shutdown_event again
 
         log.info(
@@ -43,7 +42,7 @@ async def worker_loop(
         )
 
         result = await execute_task(request)
-        queue.record_result(result)
+        await queue.record_result(result)
 
         log.info(
             "worker_task_completed",

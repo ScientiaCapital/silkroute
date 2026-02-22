@@ -1,15 +1,29 @@
 """Task queue for daemon mode — submit, consume, and track agent tasks.
 
-Uses asyncio.Queue for backpressure-aware, concurrent-safe task management.
+Uses Redis for durable, crash-safe task management:
+- LIST (silkroute:queue:pending) for FIFO queue with RPUSH/BLPOP
+- HASH (silkroute:results) for result storage by request ID
+- STRING counters for submitted/completed tracking
+
 TaskRequest and TaskResult are lightweight dataclasses for serialization.
 """
 
 from __future__ import annotations
 
-import asyncio
 import uuid
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
+
+import redis.asyncio as aioredis
+import structlog
+
+log = structlog.get_logger()
+
+# Redis key constants
+KEY_PENDING = "silkroute:queue:pending"
+KEY_RESULTS = "silkroute:results"
+KEY_COUNTER_SUBMITTED = "silkroute:counter:submitted"
+KEY_COUNTER_COMPLETED = "silkroute:counter:completed"
 
 
 @dataclass
@@ -41,52 +55,89 @@ class TaskResult:
 
 
 class TaskQueue:
-    """Async queue for daemon task management.
+    """Redis-backed async queue for daemon task management.
 
-    Wraps asyncio.Queue with result tracking and graceful drain support.
-    maxsize controls backpressure — submit() blocks when queue is full.
+    Uses Redis LIST for FIFO ordering with RPUSH/BLPOP, HASH for result
+    storage, and STRING counters for submit/complete tracking.
+    maxsize controls backpressure — submit() raises if queue exceeds limit.
     """
 
-    def __init__(self, maxsize: int = 100) -> None:
-        self._queue: asyncio.Queue[TaskRequest] = asyncio.Queue(maxsize=maxsize)
-        self._results: dict[str, TaskResult] = {}
+    def __init__(self, redis: aioredis.Redis, maxsize: int = 100) -> None:
+        self._redis = redis
+        self._maxsize = maxsize
         self._total_submitted: int = 0
         self._total_completed: int = 0
+
+    async def init_counters(self) -> None:
+        """Load counter values from Redis (call once after construction)."""
+        submitted = await self._redis.get(KEY_COUNTER_SUBMITTED)
+        completed = await self._redis.get(KEY_COUNTER_COMPLETED)
+        self._total_submitted = int(submitted) if submitted else 0
+        self._total_completed = int(completed) if completed else 0
 
     async def submit(self, request: TaskRequest) -> str:
         """Enqueue a task request. Returns the request ID.
 
-        Blocks if the queue is full (backpressure).
+        Raises RuntimeError if the queue is full (backpressure).
         """
-        await self._queue.put(request)
+        from silkroute.daemon.serialization import serialize_request
+
+        current_len = await self._redis.llen(KEY_PENDING)
+        if current_len >= self._maxsize:
+            raise RuntimeError(
+                f"Queue full ({current_len}/{self._maxsize}). "
+                "Try again later or increase maxsize."
+            )
+
+        await self._redis.rpush(KEY_PENDING, serialize_request(request))
+        await self._redis.incr(KEY_COUNTER_SUBMITTED)
         self._total_submitted += 1
         return request.id
 
-    async def consume(self) -> TaskRequest:
-        """Dequeue the next task. Blocks until one is available."""
-        return await self._queue.get()
+    async def consume(self, timeout: float = 1.0) -> TaskRequest | None:
+        """Dequeue the next task. Returns None if timeout expires.
 
-    def record_result(self, result: TaskResult) -> None:
-        """Store a completed task result for later retrieval."""
-        self._results[result.request_id] = result
+        Uses BLPOP with a configurable timeout. Returns None when no
+        task is available within the timeout window, allowing workers
+        to check shutdown events between polls.
+        """
+        from silkroute.daemon.serialization import deserialize_request
+
+        result = await self._redis.blpop(KEY_PENDING, timeout=timeout)
+        if result is None:
+            return None
+        # BLPOP returns (key, value) tuple
+        return deserialize_request(result[1])
+
+    async def record_result(self, result: TaskResult) -> None:
+        """Store a completed task result in Redis for later retrieval."""
+        from silkroute.daemon.serialization import serialize_result
+
+        await self._redis.hset(KEY_RESULTS, result.request_id, serialize_result(result))
+        await self._redis.incr(KEY_COUNTER_COMPLETED)
         self._total_completed += 1
 
-    def get_result(self, request_id: str) -> TaskResult | None:
+    async def get_result(self, request_id: str) -> TaskResult | None:
         """Look up a result by request ID. Returns None if not found."""
-        return self._results.get(request_id)
+        from silkroute.daemon.serialization import deserialize_result
 
-    def pending_count(self) -> int:
+        data = await self._redis.hget(KEY_RESULTS, request_id)
+        if data is None:
+            return None
+        return deserialize_result(data)
+
+    async def pending_count(self) -> int:
         """Number of tasks waiting in the queue."""
-        return self._queue.qsize()
+        return await self._redis.llen(KEY_PENDING)
 
     @property
     def total_submitted(self) -> int:
-        """Total tasks ever submitted."""
+        """Total tasks ever submitted (local shadow counter)."""
         return self._total_submitted
 
     @property
     def total_completed(self) -> int:
-        """Total tasks that have recorded results."""
+        """Total tasks that have recorded results (local shadow counter)."""
         return self._total_completed
 
     async def drain(self) -> list[TaskRequest]:
@@ -94,10 +145,9 @@ class TaskQueue:
 
         Returns the drained tasks so they can be logged.
         """
-        drained: list[TaskRequest] = []
-        while not self._queue.empty():
-            try:
-                drained.append(self._queue.get_nowait())
-            except asyncio.QueueEmpty:
-                break
-        return drained
+        from silkroute.daemon.serialization import deserialize_request
+
+        items = await self._redis.lrange(KEY_PENDING, 0, -1)
+        if items:
+            await self._redis.delete(KEY_PENDING)
+        return [deserialize_request(item) for item in items]

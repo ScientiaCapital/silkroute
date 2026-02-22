@@ -62,11 +62,11 @@ class HeartbeatTicker:
         try:
             while True:
                 await asyncio.sleep(self._interval)
-                self._emit_heartbeat()
+                await self._emit_heartbeat()
         except asyncio.CancelledError:
             raise  # Let stop() catch it
 
-    def _emit_heartbeat(self) -> None:
+    async def _emit_heartbeat(self) -> None:
         """Log a single heartbeat with daemon vitals."""
         uptime_seconds = int(time.monotonic() - self._started_at)
         rss_mb = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / (1024 * 1024)
@@ -74,7 +74,7 @@ class HeartbeatTicker:
         log.info(
             "heartbeat",
             uptime_seconds=uptime_seconds,
-            queue_pending=self._queue.pending_count(),
+            queue_pending=await self._queue.pending_count(),
             queue_total_submitted=self._queue.total_submitted,
             queue_total_completed=self._queue.total_completed,
             active_workers=self._active_workers_fn(),

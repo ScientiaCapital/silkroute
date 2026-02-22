@@ -1,7 +1,7 @@
 """Daemon server — main entry point for the SilkRoute daemon process.
 
 Orchestrates the Unix socket listener, worker pool, heartbeat ticker,
-and signal handling. The run() method blocks until shutdown.
+scheduler, and signal handling. The run() method blocks until shutdown.
 """
 
 from __future__ import annotations
@@ -16,13 +16,14 @@ from silkroute.config.settings import DaemonConfig
 from silkroute.daemon.heartbeat import HeartbeatTicker
 from silkroute.daemon.lifecycle import DaemonContext, shutdown, startup
 from silkroute.daemon.queue import TaskQueue, TaskRequest
+from silkroute.daemon.scheduler import DaemonScheduler
 from silkroute.daemon.worker import worker_loop
 
 log = structlog.get_logger()
 
 
 class DaemonServer:
-    """Main daemon process: event loop, socket API, worker pool, heartbeat.
+    """Main daemon process: event loop, socket API, worker pool, heartbeat, scheduler.
 
     Usage::
 
@@ -33,11 +34,12 @@ class DaemonServer:
 
     def __init__(self, config: DaemonConfig) -> None:
         self._config = config
-        self._queue = TaskQueue()
+        self._queue: TaskQueue | None = None
         self._shutdown_event = asyncio.Event()
         self._workers: list[asyncio.Task] = []
         self._context: DaemonContext | None = None
         self._socket_server: asyncio.AbstractServer | None = None
+        self._scheduler: DaemonScheduler | None = None
         self._active_worker_count = 0
 
     async def run(self) -> None:
@@ -54,14 +56,22 @@ class DaemonServer:
         for sig in (signal.SIGINT, signal.SIGTERM):
             loop.add_signal_handler(sig, self._handle_signal, sig)
 
-        # 2. Run startup sequence
+        # 2. Run startup sequence (includes Redis init)
         self._context = await startup(
             pid_path=self._config.pid_file,
             socket_path=self._config.socket_path,
         )
 
+        # 3. Create Redis-backed queue
+        self._queue = TaskQueue(redis=self._context.redis)
+        await self._queue.init_counters()
+
         try:
-            # 3. Start heartbeat ticker
+            # 4. Start scheduler
+            self._scheduler = DaemonScheduler(self._config, self._queue)
+            self._scheduler.start()
+
+            # 5. Start heartbeat ticker
             heartbeat = HeartbeatTicker(
                 interval=self._config.heartbeat_interval_seconds,
                 queue=self._queue,
@@ -69,7 +79,7 @@ class DaemonServer:
             )
             heartbeat.start()
 
-            # 4. Start worker tasks
+            # 6. Start worker tasks
             for i in range(self._config.max_concurrent_sessions):
                 task = asyncio.create_task(
                     self._worker_wrapper(i + 1),
@@ -77,17 +87,22 @@ class DaemonServer:
                 )
                 self._workers.append(task)
 
-            # 5. Start Unix socket server
+            # 7. Start Unix socket server
             await self._start_socket_server()
 
             log.info("daemon_ready")
 
-            # 6. Wait for shutdown signal
+            # 8. Wait for shutdown signal
             await self._shutdown_event.wait()
 
         finally:
-            # 7. Shutdown sequence
+            # 9. Shutdown sequence
             log.info("daemon_shutting_down")
+
+            # Stop scheduler first (prevents new task submissions)
+            if self._scheduler is not None:
+                await self._scheduler.stop()
+
             await heartbeat.stop()
 
             if self._socket_server is not None:
@@ -140,7 +155,7 @@ class DaemonServer:
             if action == "submit":
                 response = await self._handle_submit(msg)
             elif action == "status":
-                response = self._handle_status()
+                response = await self._handle_status()
             elif action == "stop":
                 response = self._handle_stop()
             else:
@@ -182,7 +197,7 @@ class DaemonServer:
 
         return {"ok": True, "id": request.id}
 
-    def _handle_status(self) -> dict:
+    async def _handle_status(self) -> dict:
         """Return daemon status summary."""
         active_count = sum(1 for w in self._workers if not w.done())
         uptime = 0.0
@@ -191,15 +206,20 @@ class DaemonServer:
 
             uptime = (datetime.now(UTC) - self._context.started_at).total_seconds()
 
-        return {
+        status = {
             "running": True,
-            "pending": self._queue.pending_count(),
+            "pending": await self._queue.pending_count(),
             "active_workers": active_count,
             "total_submitted": self._queue.total_submitted,
             "total_completed": self._queue.total_completed,
             "max_workers": self._config.max_concurrent_sessions,
             "uptime_seconds": int(uptime),
         }
+
+        if self._scheduler is not None:
+            status["scheduler_jobs"] = self._scheduler.get_jobs()
+
+        return status
 
     def _handle_stop(self) -> dict:
         """Initiate graceful shutdown."""
