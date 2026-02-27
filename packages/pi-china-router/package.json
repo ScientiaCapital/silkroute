@@ -1,0 +1,31 @@
+{
+  "name": "@silkroute/pi-china-router",
+  "version": "0.1.0",
+  "description": "Chinese LLM 3-tier routing extension for pi.dev — 13 models across DeepSeek, Qwen, GLM, Kimi",
+  "keywords": ["pi-package", "chinese-llm", "silkroute", "deepseek", "qwen", "glm", "kimi"],
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "pi": {
+    "extensions": ["./dist/extension.js"]
+  },
+  "dependencies": {
+    "@mariozechner/pi-ai": ">=0.50.0",
+    "@mariozechner/pi-agent-core": ">=0.50.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.0",
+    "vitest": "^3.0.0"
+  }
+}

@@ -1,0 +1,32 @@
+{
+  "name": "@silkroute/pi-budget-guard",
+  "version": "0.1.0",
+  "description": "Budget governance extension for pi.dev — per-project caps, cost tracking, PostgreSQL persistence",
+  "keywords": ["pi-package", "budget", "cost-tracking", "silkroute"],
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "pi": {
+    "extensions": ["./dist/extension.js"]
+  },
+  "dependencies": {
+    "@mariozechner/pi-ai": ">=0.50.0",
+    "@mariozechner/pi-agent-core": ">=0.50.0",
+    "@silkroute/pi-china-router": "0.1.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.0",
+    "vitest": "^3.0.0"
+  }
+}

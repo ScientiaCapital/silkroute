@@ -1,0 +1,6 @@
+{
+  "model": "silkroute-openrouter:deepseek/deepseek-v3.2",
+  "theme": "default",
+  "thinkingLevel": "medium",
+  "messageDelivery": "streaming"
+}
