@@ -3,64 +3,34 @@
 **Branch**: main | **Updated**: 2026-02-28
 
 ## Status
-Phase 0 (Security Hardening + Bug Fixes) complete on `main`. Shell sandbox with 25+ blocklist patterns and workspace confinement. Budget enforcement wired (daily/monthly caps + circuit breaker). All 3 carried WARNINGs fixed. Mantis runtime abstraction layer created (AgentRuntime Protocol + LegacyRuntime + DeepAgentsRuntime stub). 262/262 tests passing. Lint clean.
+Phase 1 (OpenRouter + Deep Agents Foundation) complete on `main`. DeepAgentsRuntime stub replaced with working implementation backed by deepagents v0.4.4. OpenRouter adapter via ChatOpenAI base_url override. Code Writer as first functional Deep Agent. MantisConfig added to settings. 288/288 tests passing. Lint clean.
 
-## Done (This Session — Phase 0)
-- [x] Phase 0a: Shell sandbox (`agent/sandbox.py`) — blocklist, workspace enforcement, path traversal detection
-- [x] Phase 0a: Integrated sandbox into `agent/tools.py` and `agent/loop.py`
-- [x] Phase 0b: `check_global_budget()` with daily cap, monthly cap, circuit breaker ($2/hr)
-- [x] Phase 0b: Added `get_daily_spend()` and `get_hourly_spend_rate()` to `db/repositories/projects.py`
-- [x] Phase 0b: Wired global budget into `agent/loop.py`
-- [x] Phase 0c: Fixed `_active_worker_count` in `daemon/server.py` (try/finally in `_worker_wrapper`)
-- [x] Phase 0c: Added 2 daemon_mode tests to `test_loop.py`
-- [x] Phase 0c: Created `test_lifecycle.py` with 13 tests (PID file scenarios, startup/shutdown)
-- [x] Phase 0d: Created `mantis/runtime/` package (interface, legacy, deepagents stub, registry)
-- [x] Phase 0d: Created `test_runtime.py` with 22 tests
-- [x] Created `tests/test_sandbox.py` with 31 tests
-- [x] Created `tests/test_budget_global.py` with 12 tests
-- [x] Fixed F821 bug: `budget_config` referenced before definition in `loop.py`
-- [x] Devil's Advocate review: 2 minor gaps documented (audit log DB persistence, rlimit enforcement)
+## Done (This Session — Phase 1)
+- [x] Added `[mantis]` optional deps: deepagents>=0.4.1,<0.5.0, langchain-openai>=0.3.0
+- [x] Created `MantisConfig` class (SILKROUTE_MANTIS_ prefix) in config/settings.py
+- [x] Created `providers/openrouter.py` — ChatOpenAI + OpenRouter base_url adapter
+- [x] Created `mantis/agents/code_writer.py` — first Deep Agent with LocalShellBackend
+- [x] Rewrote `mantis/runtime/deepagents.py` — delegates to run_code_writer via run_in_executor
+- [x] 26 new tests: test_openrouter (11), test_code_writer (9), test_mantis_config (4), test_runtime (+2)
+- [x] All 288 tests passing, ruff lint clean, gitleaks clean
+- [x] Default runtime remains "legacy" — opt-in via SILKROUTE_RUNTIME=deepagents
 
 ## Blockers
 None
 
-## Backlog (carried + new)
-
-### Phase 1: OpenRouter + Deep Agents Foundation (next)
-- [ ] OpenRouter adapter via `langchain-openai` (NOT langchain-openrouter)
-- [ ] First Deep Agent (Code Writer) with `create_deep_agent()`
-- [ ] MantisConfig settings extension
-- [ ] Dependencies: deepagents==0.4.1, langchain-openai>=0.3.0, langgraph>=0.2.0
-
-### Phase 2: FastAPI REST Layer
-- [ ] POST/GET /tasks, GET /daemon/status, POST /daemon/stop, GET /health
-- [ ] FastAPI alongside Unix socket (no breaking change)
-
-### Carried from Phase 0 (minor gaps)
-- [ ] Tool audit log persistence to `tool_audit_log` table (structlog covers for now)
-- [ ] Process resource limits (rlimit) — deferred to Docker containerization
-- [ ] Budget snapshot daily rollups
-- [ ] Auto-sync TypeScript models from Python
-- [ ] Test for lifecycle.py Redis startup failure path (RuntimeError) — already tested
-
-### Phase 7 Full (deferred)
-- [ ] GitHub webhooks (HTTP listener)
-- [ ] REST API / HTTP control plane
-- [ ] WebSocket for dashboard live updates
-- [ ] Background daemonization (fork/detach)
-
 ## Next Handoff
-Tomorrow: Phase 1 (OpenRouter + Deep Agents Foundation) — OpenRouter adapter, first Deep Agent, settings extension. Est: 3 days. Requires: deepagents==0.4.1 pin investigation for API stability.
+Tomorrow: Phase 2 (FastAPI REST Layer) via planning-prompts | Sonnet builder + Haiku observer | Est: 1 session, ~$3 | Observer notes: LegacyRuntime.stream() still batch-not-stream
 
 ## Tech Stack
-Python 3.12 (Click + Pydantic + litellm + asyncpg + structlog + Rich + redis + apscheduler) | Next.js 15 (React 19, Tailwind v4) | PostgreSQL 16 | Redis 7 | LiteLLM | Docker Compose
+Python 3.12 (Click + Pydantic + litellm + asyncpg + structlog + Rich + redis + apscheduler + deepagents + langchain-openai) | Next.js 15 (React 19, Tailwind v4) | PostgreSQL 16 | Redis 7 | LiteLLM | Docker Compose
 
 ## Session Stats
-- New files: 8 (4 source in mantis/ + sandbox.py + 4 test files)
-- Modified files: 7 (tools.py, loop.py, cost_guard.py, server.py, projects.py, test_loop.py, test_tools.py)
-- Tests: 176 existing + 86 new = 262 total, all passing
+- New files: 6 (openrouter.py, code_writer.py, agents/__init__.py, 3 test files)
+- Modified files: 4 (pyproject.toml, settings.py, deepagents.py, test_runtime.py)
+- Tests: 262 existing + 26 new = 288 total, all passing
 - Lint: clean (ruff check)
 - Security: gitleaks clean, 0 secrets in src/
+- Lines: +612
 
 ## Links
 - GitHub: https://github.com/ScientiaCapital/silkroute
@@ -69,4 +39,4 @@ Python 3.12 (Click + Pydantic + litellm + asyncpg + structlog + Rich + redis + a
 
 ---
 
-_Updated by Phase 0 completion. 2026-02-28._
+_Updated by Phase 1 completion. 2026-02-28._
