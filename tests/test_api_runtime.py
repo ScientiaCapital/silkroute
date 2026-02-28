@@ -4,32 +4,15 @@ from __future__ import annotations
 
 from unittest.mock import AsyncMock, patch
 
-import pytest
 import fakeredis.aioredis
+import pytest
 from fastapi.testclient import TestClient
 
 from silkroute.api.app import create_app
 from silkroute.api.deps import get_redis
-from silkroute.config.settings import (
-    ApiConfig,
-    DatabaseConfig,
-    ProviderConfig,
-    SilkRouteSettings,
-)
+from silkroute.config.settings import SilkRouteSettings
 from silkroute.daemon.queue import TaskQueue
 from silkroute.mantis.runtime.interface import AgentResult
-
-
-@pytest.fixture
-def test_settings() -> SilkRouteSettings:
-    return SilkRouteSettings(
-        providers=ProviderConfig(ollama_enabled=True),
-        api=ApiConfig(api_key="test-secret"),
-        database=DatabaseConfig(
-            redis_url="redis://localhost:6379/0",
-            postgres_url="postgresql://silkroute:silkroute@localhost:5432/silkroute",
-        ),
-    )
 
 
 @pytest.fixture

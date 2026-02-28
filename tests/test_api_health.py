@@ -7,25 +7,7 @@ from fastapi.testclient import TestClient
 
 from silkroute import __version__
 from silkroute.api.app import create_app
-from silkroute.config.settings import (
-    ApiConfig,
-    DatabaseConfig,
-    ProviderConfig,
-    SilkRouteSettings,
-)
-
-
-@pytest.fixture
-def test_settings() -> SilkRouteSettings:
-    """Minimal settings for API tests (no real provider key needed)."""
-    return SilkRouteSettings(
-        providers=ProviderConfig(ollama_enabled=True),
-        api=ApiConfig(api_key="test-secret"),
-        database=DatabaseConfig(
-            redis_url="redis://localhost:6379/0",
-            postgres_url="postgresql://silkroute:silkroute@localhost:5432/silkroute",
-        ),
-    )
+from silkroute.config.settings import SilkRouteSettings
 
 
 @pytest.fixture

@@ -5,7 +5,6 @@ import pytest
 from silkroute.agent.tools import (
     ToolRegistry,
     ToolSpec,
-    _sandbox_config,
     create_default_registry,
     parse_tool_arguments,
 )

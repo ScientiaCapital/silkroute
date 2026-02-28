@@ -24,7 +24,10 @@ from silkroute.agent.sandbox import SandboxConfig, validate_command
 
 log = structlog.get_logger()
 
-# Module-level sandbox config — set by create_default_registry()
+# Module-level sandbox config — set by create_default_registry().
+# Threading model: this global is set once per process during registry
+# creation and read (but never mutated) during tool execution.
+# Safe for concurrent asyncio tasks within a single event loop.
 _sandbox_config: SandboxConfig | None = None
 
 

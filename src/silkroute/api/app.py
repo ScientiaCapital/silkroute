@@ -10,6 +10,7 @@ from __future__ import annotations
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
+import asyncpg
 import redis.asyncio as aioredis
 import structlog
 from fastapi import FastAPI
@@ -46,8 +47,6 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     # Connect Postgres (optional — budget queries degrade gracefully)
     try:
-        import asyncpg
-
         pool = await asyncpg.create_pool(
             settings.database.postgres_url,
             min_size=1,
@@ -56,7 +55,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         )
         app.state.db_pool = pool
         log.info("api_db_connected")
-    except Exception as exc:
+    except (OSError, asyncpg.PostgresError, asyncpg.InterfaceError, ValueError) as exc:
         log.warning("api_db_failed", error=str(exc))
         app.state.db_pool = None
 

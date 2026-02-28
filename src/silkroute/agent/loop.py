@@ -10,6 +10,7 @@ continues running and logs a warning. All DB calls are wrapped in try/except.
 from __future__ import annotations
 
 import asyncio
+import json
 import os
 import time
 from pathlib import Path
@@ -44,8 +45,14 @@ async def run_agent(
     budget_limit_usd: float = 10.0,
     workspace_dir: str | None = None,
     daemon_mode: bool = False,
+    stream_queue: asyncio.Queue[str | None] | None = None,
 ) -> AgentSession:
     """Run the ReAct agent loop on a task.
+
+    Args:
+        stream_queue: If provided, per-iteration JSON events are pushed to
+            this queue for real-time streaming. A None sentinel is pushed
+            when the loop finishes.
 
     Returns an AgentSession with full history of iterations, tool calls, and costs.
     """
@@ -198,6 +205,9 @@ async def run_agent(
             else:
                 log.warning("budget_exceeded", session_id=session.id, warning=budget_check.warning)
             session.complete(SessionStatus.BUDGET_EXCEEDED)
+            _push_stream_event(stream_queue, "budget_exceeded", {
+                "iteration": i, "warning": budget_check.warning,
+            })
             break
         if budget_check.warning:
             if not daemon_mode:
@@ -230,6 +240,9 @@ async def run_agent(
             if not daemon_mode:
                 console.print(f"  [red]LLM error: {e}[/red]")
             session.complete(SessionStatus.FAILED)
+            _push_stream_event(stream_queue, "error", {
+                "iteration": i, "error": str(e),
+            })
             break
 
         latency_ms = _now_ms() - start_ms
@@ -263,6 +276,11 @@ async def run_agent(
             _schedule_db_writes(pool, pending_db_tasks, session, iteration, model)
             messages.append({"role": "assistant", "content": thought})
             session.complete(SessionStatus.COMPLETED)
+            _push_stream_event(stream_queue, "completed", {
+                "iteration": i,
+                "output": thought[:500],
+                "cost_usd": session.total_cost_usd,
+            })
             if not daemon_mode:
                 console.print("\n  [bold green]Task completed.[/bold green]")
             break
@@ -310,6 +328,13 @@ async def run_agent(
         session.add_iteration(iteration)
         _schedule_db_writes(pool, pending_db_tasks, session, iteration, model)
 
+        _push_stream_event(stream_queue, "iteration", {
+            "iteration": i,
+            "tools_called": len(tool_call_records),
+            "cost_usd": cost_usd,
+            "thought": thought[:200],
+        })
+
         log.info(
             "iteration_complete",
             iteration=i,
@@ -333,6 +358,10 @@ async def run_agent(
             await db_sessions.close_session(pool, session)
         except Exception as exc:
             log.warning("db_session_close_failed", error=str(exc))
+
+    # Signal stream end
+    if stream_queue is not None:
+        await stream_queue.put(None)
 
     # Summary
     if not daemon_mode:
@@ -397,6 +426,25 @@ def _extract_cost(
     return estimate_cost(model, input_tokens, output_tokens)
 
 
+def _push_stream_event(
+    queue: asyncio.Queue[str | None] | None,
+    event_type: str,
+    data: dict[str, Any],
+) -> None:
+    """Push a JSON stream event to the queue if it's active.
+
+    Non-blocking: uses put_nowait so the agent loop is never
+    stalled by a slow consumer.
+    """
+    if queue is None:
+        return
+    payload = json.dumps({"type": event_type, **data})
+    try:
+        queue.put_nowait(payload)
+    except asyncio.QueueFull:
+        log.warning("stream_queue_full", event_type=event_type)
+
+
 def _now_ms() -> int:
     """Current time in milliseconds."""
     return int(time.monotonic() * 1000)
@@ -423,16 +471,22 @@ def _schedule_db_writes(
     """Fire-and-forget DB writes for the current iteration.
 
     Appends tasks to *pending* so they can be awaited before returning.
+    Includes session update, cost log, and tool audit log.
     """
     if pool is None:
         return
     try:
         from silkroute.db.repositories import cost_logs as db_cost_logs
         from silkroute.db.repositories import sessions as db_sessions
+        from silkroute.db.repositories import tool_audit as db_tool_audit
 
         pending.append(asyncio.create_task(db_sessions.update_session(pool, session)))
         pending.append(asyncio.create_task(
             db_cost_logs.insert_cost_log(pool, session, iteration, model),
         ))
+        if iteration.tool_calls:
+            pending.append(asyncio.create_task(
+                db_tool_audit.insert_tool_audit_logs(pool, session, iteration),
+            ))
     except Exception as exc:
         log.warning("db_write_schedule_failed", error=str(exc))

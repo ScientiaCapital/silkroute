@@ -143,26 +143,29 @@ class TestLegacyRuntime:
 
     @pytest.mark.asyncio
     async def test_stream_yields_output(self) -> None:
-        mock_session = MagicMock()
-        mock_session.status.value = "completed"
-        mock_session.id = "s-1"
-        mock_session.iteration_count = 1
-        mock_session.total_cost_usd = 0.01
-        mock_session.model_id = "test"
-        mock_session.total_input_tokens = 100
-        mock_session.total_output_tokens = 50
-        mock_session.iterations = [MagicMock(thought="streamed output")]
+        """stream() now uses asyncio.Queue — mock run_agent to push events."""
+        import json
 
-        with patch("silkroute.agent.loop.run_agent", new_callable=AsyncMock) as mock_run:
-            mock_run.return_value = mock_session
+        async def mock_run_agent(task, *, stream_queue=None, **kwargs):
+            """Mock that pushes a stream event and None sentinel."""
+            if stream_queue is not None:
+                await stream_queue.put(json.dumps({"type": "completed", "output": "streamed output"}))
+                await stream_queue.put(None)
+            mock_session = MagicMock()
+            mock_session.status.value = "completed"
+            mock_session.id = "s-1"
+            return mock_session
 
+        with patch("silkroute.agent.loop.run_agent", mock_run_agent):
             runtime = LegacyRuntime()
             chunks = []
             async for chunk in runtime.stream("Do task"):
                 chunks.append(chunk)
 
         assert len(chunks) == 1
-        assert chunks[0] == "streamed output"
+        parsed = json.loads(chunks[0])
+        assert parsed["type"] == "completed"
+        assert parsed["output"] == "streamed output"
 
     def test_name(self) -> None:
         assert LegacyRuntime().name == "legacy"

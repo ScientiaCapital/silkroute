@@ -7,6 +7,8 @@ AgentResult for the unified runtime interface.
 
 from __future__ import annotations
 
+import asyncio
+import contextlib
 from collections.abc import AsyncIterator
 
 import structlog
@@ -60,9 +62,42 @@ class LegacyRuntime:
         )
 
     async def stream(self, task: str, config: RuntimeConfig | None = None) -> AsyncIterator[str]:
-        """Stream output — legacy runtime doesn't support true streaming.
+        """Stream per-iteration output from the ReAct loop.
 
-        Falls back to running the full task and yielding the result.
+        Spawns run_agent() as a background task with a stream_queue,
+        then yields JSON chunks as each iteration completes. Cancels
+        the agent task on disconnect.
         """
-        result = await self.invoke(task, config)
-        yield result.output
+        from silkroute.agent.loop import run_agent
+
+        cfg = config or RuntimeConfig()
+        queue: asyncio.Queue[str | None] = asyncio.Queue(maxsize=100)
+
+        agent_task = asyncio.create_task(
+            run_agent(
+                task,
+                model_override=cfg.model_override,
+                tier_override=cfg.tier_override,
+                project_id=cfg.project_id,
+                max_iterations=cfg.max_iterations,
+                budget_limit_usd=cfg.budget_limit_usd,
+                workspace_dir=cfg.workspace_dir,
+                daemon_mode=True,
+                stream_queue=queue,
+            )
+        )
+
+        try:
+            while True:
+                chunk = await queue.get()
+                if chunk is None:
+                    break
+                yield chunk
+        except asyncio.CancelledError:
+            agent_task.cancel()
+            raise
+        finally:
+            if not agent_task.done():
+                agent_task.cancel()
+                with contextlib.suppress(asyncio.CancelledError):
+                    await agent_task

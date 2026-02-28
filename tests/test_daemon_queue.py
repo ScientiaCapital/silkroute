@@ -5,7 +5,6 @@ Uses fakeredis for Redis-backed TaskQueue testing without a real server.
 
 from __future__ import annotations
 
-import asyncio
 from datetime import UTC, datetime
 
 import fakeredis.aioredis

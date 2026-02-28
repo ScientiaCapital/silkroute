@@ -1,6 +1,6 @@
 """Tests for silkroute.config.settings."""
-import pytest
-from silkroute.config.settings import ModelTier, HardwareProfile, BudgetConfig
+from silkroute.config.settings import BudgetConfig, HardwareProfile, ModelTier
+
 
 class TestModelTier:
     def test_tier_values(self):

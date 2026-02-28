@@ -1,10 +1,14 @@
 """Tests for silkroute.providers.models."""
-import pytest
 from silkroute.config.settings import ModelTier
 from silkroute.providers.models import (
-    ALL_MODELS, MODELS_BY_TIER, get_model, get_cheapest_model, estimate_cost,
-    Capability, Provider,
+    ALL_MODELS,
+    MODELS_BY_TIER,
+    Capability,
+    estimate_cost,
+    get_cheapest_model,
+    get_model,
 )
+
 
 class TestModelRegistry:
     def test_total_model_count(self):

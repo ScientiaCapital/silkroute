@@ -1,5 +1,7 @@
 """Tests for silkroute.agent.loop — integration tests with mocked LLM."""
 
+import asyncio
+import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -223,6 +225,157 @@ class TestRunAgent:
 
         assert session.status == SessionStatus.COMPLETED
         assert session.iteration_count == 2
+
+
+class TestRunAgentStreaming:
+    """Tests for stream_queue parameter — per-iteration event streaming."""
+
+    @pytest.mark.asyncio
+    async def test_queue_receives_completed_event(self):
+        """Immediate completion pushes a 'completed' event + None sentinel."""
+        mock_response = _make_completion_response("All done!")
+        queue: asyncio.Queue[str | None] = asyncio.Queue()
+
+        with patch("silkroute.agent.loop.litellm") as mock_litellm:
+            mock_litellm.acompletion = AsyncMock(return_value=mock_response)
+            mock_litellm.completion_cost.return_value = 0.0001
+            mock_litellm.suppress_debug_info = True
+
+            session = await run_agent(
+                "Quick task",
+                budget_limit_usd=1.0,
+                max_iterations=5,
+                daemon_mode=True,
+                stream_queue=queue,
+            )
+
+        assert session.status == SessionStatus.COMPLETED
+
+        events = []
+        while not queue.empty():
+            events.append(queue.get_nowait())
+
+        # Should have: completed event, then None sentinel
+        assert len(events) == 2
+        completed = json.loads(events[0])
+        assert completed["type"] == "completed"
+        assert "output" in completed
+        assert events[1] is None
+
+    @pytest.mark.asyncio
+    async def test_queue_receives_iteration_events(self):
+        """Tool call iterations push 'iteration' events."""
+        tool_response = _make_tool_call_response("list_directory", '{"path": "."}')
+        final_response = _make_completion_response("Found files.")
+        queue: asyncio.Queue[str | None] = asyncio.Queue()
+
+        with patch("silkroute.agent.loop.litellm") as mock_litellm:
+            mock_litellm.acompletion = AsyncMock(
+                side_effect=[tool_response, final_response]
+            )
+            mock_litellm.completion_cost.return_value = 0.0001
+            mock_litellm.suppress_debug_info = True
+
+            session = await run_agent(
+                "List files",
+                budget_limit_usd=1.0,
+                max_iterations=5,
+                daemon_mode=True,
+                stream_queue=queue,
+            )
+
+        assert session.status == SessionStatus.COMPLETED
+
+        events = []
+        while not queue.empty():
+            events.append(queue.get_nowait())
+
+        # iteration event, completed event, None sentinel
+        assert len(events) == 3
+        assert json.loads(events[0])["type"] == "iteration"
+        assert json.loads(events[1])["type"] == "completed"
+        assert events[2] is None
+
+    @pytest.mark.asyncio
+    async def test_queue_receives_budget_event(self):
+        """Budget exceeded pushes a 'budget_exceeded' event."""
+        tool_response = _make_tool_call_response("shell_exec", '{"command": "echo hi"}')
+        queue: asyncio.Queue[str | None] = asyncio.Queue()
+
+        with patch("silkroute.agent.loop.litellm") as mock_litellm:
+            mock_litellm.acompletion = AsyncMock(return_value=tool_response)
+            mock_litellm.completion_cost.return_value = 0.005
+            mock_litellm.suppress_debug_info = True
+
+            session = await run_agent(
+                "Expensive task",
+                budget_limit_usd=0.005,
+                max_iterations=10,
+                daemon_mode=True,
+                stream_queue=queue,
+            )
+
+        assert session.status == SessionStatus.BUDGET_EXCEEDED
+
+        events = []
+        while not queue.empty():
+            events.append(queue.get_nowait())
+
+        # Find the budget_exceeded event
+        types = [json.loads(e)["type"] for e in events if e is not None]
+        assert "budget_exceeded" in types
+        # None sentinel at the end
+        assert events[-1] is None
+
+    @pytest.mark.asyncio
+    async def test_queue_none_unchanged_behavior(self):
+        """stream_queue=None should not change behavior."""
+        mock_response = _make_completion_response("Done")
+
+        with patch("silkroute.agent.loop.litellm") as mock_litellm:
+            mock_litellm.acompletion = AsyncMock(return_value=mock_response)
+            mock_litellm.completion_cost.return_value = 0.0001
+            mock_litellm.suppress_debug_info = True
+
+            session = await run_agent(
+                "Simple task",
+                budget_limit_usd=1.0,
+                max_iterations=5,
+                daemon_mode=True,
+                stream_queue=None,
+            )
+
+        assert session.status == SessionStatus.COMPLETED
+        assert session.iteration_count == 1
+
+    @pytest.mark.asyncio
+    async def test_queue_receives_error_event(self):
+        """LLM error pushes an 'error' event."""
+        queue: asyncio.Queue[str | None] = asyncio.Queue()
+
+        with patch("silkroute.agent.loop.litellm") as mock_litellm:
+            mock_litellm.acompletion = AsyncMock(
+                side_effect=RuntimeError("API down")
+            )
+            mock_litellm.suppress_debug_info = True
+
+            session = await run_agent(
+                "Failing task",
+                budget_limit_usd=1.0,
+                max_iterations=5,
+                daemon_mode=True,
+                stream_queue=queue,
+            )
+
+        assert session.status == SessionStatus.FAILED
+
+        events = []
+        while not queue.empty():
+            events.append(queue.get_nowait())
+
+        types = [json.loads(e)["type"] for e in events if e is not None]
+        assert "error" in types
+        assert events[-1] is None
 
 
 class TestRunAgentWithDB:
