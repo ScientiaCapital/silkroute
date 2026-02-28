@@ -56,6 +56,10 @@ class RuntimeInvokeRequest(BaseModel):
     model_override: str | None = None
     max_iterations: int = Field(default=25, ge=1, le=200)
     budget_limit_usd: float = Field(default=10.0, ge=0.01, le=100.0)
+    orchestrate: bool = Field(
+        default=False,
+        description="Route to OrchestratorRuntime for task decomposition",
+    )
 
 
 class RuntimeInvokeResponse(BaseModel):

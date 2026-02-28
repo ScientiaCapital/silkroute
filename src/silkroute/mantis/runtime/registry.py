@@ -3,6 +3,7 @@
 Selects the runtime backend based on SILKROUTE_RUNTIME env var:
 - "legacy" (default): uses the existing ReAct loop
 - "deepagents": uses Deep Agents framework (Phase 1)
+- "orchestrator": multi-agent orchestration (Phase 3)
 """
 
 from __future__ import annotations
@@ -49,10 +50,15 @@ def get_runtime(runtime_type: str | None = None) -> AgentRuntime:
         from silkroute.mantis.runtime.deepagents import DeepAgentsRuntime
 
         _cached_runtime = DeepAgentsRuntime()
+    elif rt == RuntimeType.ORCHESTRATOR:
+        from silkroute.mantis.orchestrator.runtime import OrchestratorRuntime
+
+        _cached_runtime = OrchestratorRuntime()
     else:
         raise ValueError(
             f"Unknown runtime type: {rt!r}. "
-            f"Valid options: {RuntimeType.LEGACY!r}, {RuntimeType.DEEP_AGENTS!r}"
+            f"Valid options: {RuntimeType.LEGACY!r}, {RuntimeType.DEEP_AGENTS!r}, "
+            f"{RuntimeType.ORCHESTRATOR!r}"
         )
 
     _cached_type = rt

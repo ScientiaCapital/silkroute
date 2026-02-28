@@ -176,6 +176,12 @@ class MantisConfig(BaseSettings):
     enable_subagents: bool = Field(
         default=False, description="Enable sub-agent spawning (Phase 2+)"
     )
+    orchestrator_max_sub_tasks: int = Field(
+        default=5, description="Max sub-tasks per orchestration"
+    )
+    orchestrator_stage_timeout_seconds: int = Field(
+        default=120, description="Timeout per orchestrator stage in seconds"
+    )
 
 
 class ApiConfig(BaseSettings):
@@ -191,6 +197,9 @@ class ApiConfig(BaseSettings):
         description="Allowed CORS origins",
     )
     queue_maxsize: int = Field(default=100, description="Max pending tasks in queue")
+    stream_timeout_seconds: int = Field(
+        default=300, description="Server-side SSE stream timeout"
+    )
 
 
 class DatabaseConfig(BaseSettings):
