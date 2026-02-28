@@ -5,4 +5,4 @@
 
 ---
 
-_Reset after Phase 2 session close. Previous reports archived to `.claude/archive/2026-02-28-phase2-OBSERVER_QUALITY.md`._
+_Reset after Phase 3 session close. Previous reports archived to `.claude/archive/2026-02-28-phase3-OBSERVER_QUALITY.md`._

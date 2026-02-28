@@ -1,48 +1,47 @@
 # SilkRoute Backlog
 
-**Updated:** 2026-02-28 (Phase 2 complete)
+**Updated:** 2026-02-28 (Phase 3 complete)
 
-## Priority: High (resolve in Phase 3)
-
-| # | Item | Source | Effort | Impact | Owner | ETA |
-|---|------|--------|--------|--------|-------|-----|
-| 1 | Tool audit log persistence to `tool_audit_log` DB table | Observer WARNING (Phase 0) | S | Medium | — | Phase 3 |
-| 2 | LegacyRuntime.stream() is batch-not-stream (SSE stream endpoint degrades) | Observer SMELL (Phase 0) | M | Medium | — | Phase 3 |
-| 3 | Narrow `app.py:59` broad `except Exception` to `(OSError, asyncpg.PostgresError)` | Observer WARNING (Phase 2) | XS | Low | — | Phase 3 |
-| 4 | SSE stream endpoint has no server-side timeout/max-duration | Observer WARNING (Phase 2 Arch) | S | Medium | — | Phase 3 |
-
-## Priority: Medium (resolve in Phase 3-4)
+## Priority: High (resolve in Phase 4)
 
 | # | Item | Source | Effort | Impact | Owner | ETA |
 |---|------|--------|--------|--------|-------|-----|
-| 5 | Process rlimit enforcement (memory cap) | Observer WARNING (Phase 0) | M | Low | — | Phase 3 (Docker) |
-| 6 | Document threading model assumption for `_sandbox_config` | Observer RISK (Phase 0) | XS | Low | — | Phase 3 |
-| 7 | Budget snapshot daily rollups | Backlog carry-forward | M | Medium | — | Phase 3 |
-| 8 | Add test for lifespan Redis/DB connect+disconnect | Observer WARNING (Phase 2) | S | Low | — | Phase 3 |
-| 9 | Add test for SSE stream error path (`[ERROR]` event) | Observer WARNING (Phase 2) | XS | Low | — | Phase 3 |
-| 10 | Extract duplicate `test_settings` fixture to shared API conftest | Observer INFO (Phase 2) | XS | Low | — | Phase 3 |
+| 1 | OrchestratorRuntime.stream() broad `except Exception` — narrow to known exceptions | Observer W1 (Phase 3) | XS | Low | — | Phase 4 |
+| 2 | BudgetMiddleware reads remaining_usd outside lock — use try_reserve() for atomic claim | Observer W2 (Phase 3) | S | Low | — | Phase 4 |
+| 3 | OrchestratorRuntime.stream() processes sub-tasks sequentially within stages | Observer R2 (Phase 3) | M | Medium | — | Phase 4 |
+
+## Priority: Medium (resolve in Phase 4-5)
+
+| # | Item | Source | Effort | Impact | Owner | ETA |
+|---|------|--------|--------|--------|-------|-----|
+| 4 | `allocate_budget()` mutates sub-tasks in place — return copies | Observer W3 (Phase 3) | XS | Low | — | Phase 4 |
+| 5 | `_split_compound()` naive " and " splitting in natural prose | Observer W4 (Phase 3) | N/A | Medium | — | Phase 4 (LLM decomposer replaces) |
+| 6 | Process rlimit enforcement (memory cap) | Observer WARNING (Phase 0) | M | Low | — | Docker phase |
+| 7 | Budget snapshot daily rollups | Backlog carry-forward | M | Medium | — | Phase 4 |
+| 8 | Add test for lifespan Redis/DB connect+disconnect | Observer WARNING (Phase 2) | S | Low | — | Phase 4 |
+| 9 | Add test for SSE stream error path (`[ERROR]` event) | Observer WARNING (Phase 2) | XS | Low | — | Phase 4 |
 
 ## Priority: Low (future phases)
 
 | # | Item | Source | Effort | Impact | Owner | ETA |
 |---|------|--------|--------|--------|-------|-----|
-| 11 | Auto-sync TypeScript models from Python | Backlog carry-forward | L | Low | — | Phase 6 |
-| 12 | GitHub webhooks (HTTP listener) | Phase 7 Full | L | Medium | — | Phase 4+ |
-| 13 | WebSocket for dashboard live updates | Phase 7 Full | L | Medium | — | Phase 6 |
-| 14 | Background daemonization (fork/detach) | Phase 7 Full | M | Medium | — | Phase 4 |
-| 15 | Runtime invoke timeout configurable (currently hardcoded 300s) | Observer INFO (Phase 2 Arch) | XS | Low | — | Phase 3 |
-| 16 | API rate limiting tiers | Plan scope exclusion (Phase 2) | M | Medium | — | Phase 4+ |
+| 10 | Auto-sync TypeScript models from Python | Backlog carry-forward | L | Low | — | Phase 6 |
+| 11 | GitHub webhooks (HTTP listener) | Phase 7 Full | L | Medium | — | Phase 4+ |
+| 12 | WebSocket for dashboard live updates | Phase 7 Full | L | Medium | — | Phase 6 |
+| 13 | Background daemonization (fork/detach) | Phase 7 Full | M | Medium | — | Phase 4 |
+| 14 | API rate limiting tiers | Plan scope exclusion (Phase 2) | M | Medium | — | Phase 4+ |
 
-## Resolved (This Session — Phase 2)
+## Resolved (This Session — Phase 3)
 
 | Item | Resolution |
 |------|-----------|
-| REST API / HTTP control plane (Backlog #8) | RESOLVED — 11 endpoints at `localhost:8787`, full test suite |
-| `silkroute api` CLI command | RESOLVED — uvicorn launcher with --host/--port/--reload |
-| Bearer token auth | RESOLVED — `secrets.compare_digest()`, dev mode when key empty |
-| Queue backpressure HTTP surface | RESOLVED — 429 on full, 503 on Redis down |
-| Budget governance via HTTP | RESOLVED — fail-open when Postgres unavailable |
-| Model catalog endpoint | RESOLVED — filterable by tier/capability, URL-encoded IDs |
+| Tool audit log persistence (#1 from Phase 2 backlog) | RESOLVED — `db/repositories/tool_audit.py` + wired into `_schedule_db_writes()` |
+| LegacyRuntime.stream() batch-not-stream (#2) | RESOLVED — asyncio.Queue producer-consumer pattern |
+| Narrow `app.py` broad `except Exception` (#3) | RESOLVED — narrowed to `(OSError, asyncpg.PostgresError, asyncpg.InterfaceError, ValueError)` |
+| SSE stream endpoint no timeout (#4) | RESOLVED — `stream_timeout_seconds: 300` in ApiConfig + asyncio.timeout() |
+| Document threading model for `_sandbox_config` (#6) | RESOLVED — docstring added to agent/tools.py |
+| Extract duplicate `test_settings` fixture (#10) | RESOLVED — shared fixture in tests/conftest.py |
+| Runtime invoke timeout configurable (#15) | RESOLVED — stream_timeout_seconds in ApiConfig |
 
 ---
 
