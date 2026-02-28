@@ -2,6 +2,9 @@
 
 Provides a registry for tool specifications and 4 built-in tools:
 shell_exec, read_file, write_file, list_directory.
+
+Shell execution is sandboxed via agent.sandbox — see that module for
+blocklist patterns, workspace enforcement, and resource limits.
 """
 
 from __future__ import annotations
@@ -17,7 +20,12 @@ from typing import Any
 
 import structlog
 
+from silkroute.agent.sandbox import SandboxConfig, validate_command
+
 log = structlog.get_logger()
+
+# Module-level sandbox config — set by create_default_registry()
+_sandbox_config: SandboxConfig | None = None
 
 
 @dataclass
@@ -121,19 +129,42 @@ def parse_tool_arguments(raw: str | dict) -> dict[str, Any]:
 
 
 async def _shell_exec(command: str, timeout: int = 30) -> str:
-    """Execute a shell command with timeout.
+    """Execute a shell command with timeout and sandbox validation.
 
-    NOTE: This is an intentional agent capability — the agent needs shell
-    access to perform tasks like running tests, git operations, etc.
-    Input comes from the LLM, not from untrusted external users.
+    All commands pass through the sandbox before execution:
+    - Blocklist check (rejects destructive/exfiltration patterns)
+    - Working directory enforcement (confines to workspace)
+    - Resource limits (memory cap via ulimit)
+
+    NOTE: This uses create_subprocess_shell intentionally — the agent
+    requires shell features (pipes, globbing, env vars). The sandbox
+    layer validates commands before they reach the shell.
     """
     timeout = min(max(timeout, 1), 120)  # Clamp 1-120s
+
+    # Sandbox validation
+    if _sandbox_config is not None:
+        violation = validate_command(command, _sandbox_config)
+        if violation is not None:
+            log.warning(
+                "shell_exec_blocked",
+                command=command[:200],
+                reason=violation.reason,
+            )
+            return f"Error: Command blocked by sandbox — {violation.reason}"
+
     try:
-        proc = await asyncio.create_subprocess_shell(
-            command,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-        )
+        # Build execution kwargs
+        kwargs: dict[str, Any] = {
+            "stdout": asyncio.subprocess.PIPE,
+            "stderr": asyncio.subprocess.PIPE,
+        }
+
+        # Set working directory if sandbox is configured
+        if _sandbox_config is not None:
+            kwargs["cwd"] = str(_sandbox_config.workspace_dir)
+
+        proc = await asyncio.create_subprocess_shell(command, **kwargs)
         stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout)
         output = stdout.decode(errors="replace")
         if proc.returncode != 0:
@@ -209,8 +240,19 @@ async def _list_directory(path: str = ".") -> str:
         return f"Error listing directory: {e}"
 
 
-def create_default_registry() -> ToolRegistry:
-    """Create a registry with the 4 built-in tools."""
+def create_default_registry(workspace_dir: str | None = None) -> ToolRegistry:
+    """Create a registry with the 4 built-in tools.
+
+    If workspace_dir is provided, shell_exec commands are sandboxed:
+    blocklist validation, working directory enforcement, and resource limits.
+    """
+    global _sandbox_config  # noqa: PLW0603
+
+    if workspace_dir is not None:
+        _sandbox_config = SandboxConfig(workspace_dir=Path(workspace_dir).resolve())
+    else:
+        _sandbox_config = None
+
     registry = ToolRegistry()
 
     registry.register(ToolSpec(

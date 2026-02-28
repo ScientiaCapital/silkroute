@@ -5,6 +5,7 @@ import pytest
 from silkroute.agent.tools import (
     ToolRegistry,
     ToolSpec,
+    _sandbox_config,
     create_default_registry,
     parse_tool_arguments,
 )
@@ -124,3 +125,31 @@ class TestBuiltinTools:
         result = await registry.execute("nonexistent_tool", {})
         assert "Error" in result
         assert "Unknown tool" in result
+
+
+class TestSandboxedShellExec:
+    """Shell exec integration with sandbox."""
+
+    @pytest.mark.asyncio
+    async def test_sandbox_blocks_dangerous_command(self, tmp_path):
+        registry = create_default_registry(workspace_dir=str(tmp_path))
+        result = await registry.execute("shell_exec", {"command": "sudo rm -rf /"})
+        assert "blocked by sandbox" in result
+
+    @pytest.mark.asyncio
+    async def test_sandbox_allows_safe_command(self, tmp_path):
+        registry = create_default_registry(workspace_dir=str(tmp_path))
+        result = await registry.execute("shell_exec", {"command": "echo hello_sandbox"})
+        assert "hello_sandbox" in result
+
+    @pytest.mark.asyncio
+    async def test_no_sandbox_without_workspace(self):
+        registry = create_default_registry(workspace_dir=None)
+        result = await registry.execute("shell_exec", {"command": "echo no_sandbox"})
+        assert "no_sandbox" in result
+
+    @pytest.mark.asyncio
+    async def test_workspace_dir_sets_cwd(self, tmp_path):
+        registry = create_default_registry(workspace_dir=str(tmp_path))
+        result = await registry.execute("shell_exec", {"command": "pwd"})
+        assert str(tmp_path) in result

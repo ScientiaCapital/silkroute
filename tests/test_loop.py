@@ -180,6 +180,51 @@ class TestRunAgent:
         assert model is not None
 
 
+    @pytest.mark.asyncio
+    async def test_daemon_mode_no_console_output(self, capsys):
+        """daemon_mode=True suppresses Rich console output."""
+        mock_response = _make_completion_response("Done in daemon mode.")
+
+        with patch("silkroute.agent.loop.litellm") as mock_litellm:
+            mock_litellm.acompletion = AsyncMock(return_value=mock_response)
+            mock_litellm.completion_cost.return_value = 0.0001
+            mock_litellm.suppress_debug_info = True
+
+            session = await run_agent(
+                "Daemon task",
+                budget_limit_usd=1.0,
+                max_iterations=5,
+                daemon_mode=True,
+            )
+
+        assert session.status == SessionStatus.COMPLETED
+        assert session.iteration_count == 1
+        # In daemon mode, Rich should not print panels/rules to stdout
+        captured = capsys.readouterr()
+        assert "SilkRoute Agent" not in captured.out
+
+    @pytest.mark.asyncio
+    async def test_daemon_mode_tool_call_then_complete(self):
+        """daemon_mode=True works with tool calls."""
+        tool_response = _make_tool_call_response("list_directory", '{"path": "."}')
+        final_response = _make_completion_response("Found files.")
+
+        with patch("silkroute.agent.loop.litellm") as mock_litellm:
+            mock_litellm.acompletion = AsyncMock(side_effect=[tool_response, final_response])
+            mock_litellm.completion_cost.return_value = 0.0001
+            mock_litellm.suppress_debug_info = True
+
+            session = await run_agent(
+                "List files in daemon",
+                budget_limit_usd=1.0,
+                max_iterations=5,
+                daemon_mode=True,
+            )
+
+        assert session.status == SessionStatus.COMPLETED
+        assert session.iteration_count == 2
+
+
 class TestRunAgentWithDB:
     """Tests verifying DB integration path when persistence is enabled."""
 

@@ -121,11 +121,15 @@ class DaemonServer:
 
     async def _worker_wrapper(self, worker_id: int) -> None:
         """Wrap worker_loop to track active count."""
-        await worker_loop(
-            worker_id=worker_id,
-            queue=self._queue,
-            shutdown_event=self._shutdown_event,
-        )
+        self._active_worker_count += 1
+        try:
+            await worker_loop(
+                worker_id=worker_id,
+                queue=self._queue,
+                shutdown_event=self._shutdown_event,
+            )
+        finally:
+            self._active_worker_count -= 1
 
     async def _start_socket_server(self) -> None:
         """Listen on Unix socket for client connections."""

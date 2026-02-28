@@ -22,7 +22,7 @@ from rich.panel import Panel
 from rich.rule import Rule
 
 from silkroute.agent.classifier import classify_task
-from silkroute.agent.cost_guard import check_budget
+from silkroute.agent.cost_guard import check_budget, check_global_budget
 from silkroute.agent.prompts import build_system_prompt
 from silkroute.agent.router import get_litellm_model_string, select_model
 from silkroute.agent.session import AgentSession, Iteration, SessionStatus, ToolCall
@@ -87,6 +87,9 @@ async def run_agent(
         budget_limit_usd=budget_limit_usd,
     )
 
+    # Budget config needed for both per-session and global checks
+    budget_config = BudgetConfig()
+
     # Step 3b: Database persistence (optional — non-fatal if Postgres unavailable)
     pool = None
     persist = AgentConfig().persist_sessions
@@ -123,16 +126,38 @@ async def run_agent(
                 session.complete(SessionStatus.BUDGET_EXCEEDED)
                 await db_sessions.close_session(pool, session)
                 return session
+
+            # Global budget enforcement: daily cap, monthly cap, circuit breaker
+            daily_spend = await db_projects.get_daily_spend(pool, project_id)
+            hourly_rate = await db_projects.get_hourly_spend_rate(pool, project_id)
+            global_check = check_global_budget(
+                daily_spent=daily_spend,
+                monthly_spent=monthly_spend,
+                hourly_rate=hourly_rate,
+                budget_config=budget_config,
+            )
+            if not global_check.allowed:
+                if not daemon_mode:
+                    console.print(f"  [red]{global_check.warning}[/red]")
+                else:
+                    log.warning("global_budget_exceeded", warning=global_check.warning)
+                session.complete(SessionStatus.BUDGET_EXCEEDED)
+                await db_sessions.close_session(pool, session)
+                return session
+            if global_check.warning:
+                if not daemon_mode:
+                    console.print(f"  [yellow]{global_check.warning}[/yellow]")
+                else:
+                    log.warning("global_budget_warning", warning=global_check.warning)
         except Exception as exc:
             log.warning("db_session_init_failed", error=str(exc))
             pool = None  # Disable DB for this run
 
     pending_db_tasks: list[asyncio.Task[None]] = []
 
-    # Step 4: Set up tools and system prompt
-    registry = create_default_registry()
+    # Step 4: Set up tools and system prompt (sandbox shell to workspace)
+    registry = create_default_registry(workspace_dir=workspace_dir)
     tools = registry.to_openai_tools()
-    budget_config = BudgetConfig()
 
     system_prompt = build_system_prompt(
         project_id=project_id,

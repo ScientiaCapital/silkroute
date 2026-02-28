@@ -1,72 +1,66 @@
 # silkroute
 
-**Branch**: feature/phase7a-core-daemon | **Updated**: 2026-02-22
+**Branch**: main | **Updated**: 2026-02-28
 
 ## Status
-Phase 7b (Redis Queue + APScheduler Cron) complete on `feature/phase7a-core-daemon` branch. Daemon now persists tasks in Redis (LIST/HASH/STRING), survives restarts without data loss, and has APScheduler cron jobs for nightly scans + weekly dependency audits. 176/176 tests passing. Lint clean.
+Phase 0 (Security Hardening + Bug Fixes) complete on `main`. Shell sandbox with 25+ blocklist patterns and workspace confinement. Budget enforcement wired (daily/monthly caps + circuit breaker). All 3 carried WARNINGs fixed. Mantis runtime abstraction layer created (AgentRuntime Protocol + LegacyRuntime + DeepAgentsRuntime stub). 262/262 tests passing. Lint clean.
 
-## Done (This Session — Phase 7b)
-- [x] Created daemon/redis_pool.py — async Redis singleton with retry decorator (mirrors db/pool.py)
-- [x] Created daemon/serialization.py — JSON round-trip for TaskRequest/TaskResult via dataclasses.asdict
-- [x] Created daemon/scheduler.py — DaemonScheduler with APScheduler + RedisJobStore, 2 built-in cron jobs
-- [x] Rewrote daemon/queue.py — asyncio.Queue replaced with Redis LIST/HASH/STRING
-- [x] Updated daemon/worker.py — `await queue.record_result(result)` (now async)
-- [x] Updated daemon/server.py — Redis pool wiring, scheduler lifecycle, async status with scheduler_jobs
-- [x] Updated daemon/lifecycle.py — Redis init (required) and shutdown in DaemonContext
-- [x] Updated daemon/heartbeat.py — async `_emit_heartbeat()` for Redis `pending_count()`
-- [x] Updated daemon/__init__.py — added DaemonScheduler, get_redis, close_redis exports
-- [x] Removed unused deps: supabase, prometheus-client from pyproject.toml
-- [x] Added fakeredis>=2.21.0 to dev deps
-- [x] Created tests/conftest.py with fakeredis fixture
-- [x] Created tests/test_redis_pool.py (11 tests), test_serialization.py (9 tests), test_daemon_scheduler.py (10 tests)
-- [x] Refactored tests/test_daemon_queue.py, test_daemon_worker.py, test_daemon_server.py, test_daemon_heartbeat.py for fakeredis
-- [x] Feature contract: .claude/contracts/phase7b-redis-scheduler.md
-- [x] Observer-full ran — PASS, no BLOCKERs
-- [x] Security gate: 176/176 tests, lint clean, gitleaks clean
+## Done (This Session — Phase 0)
+- [x] Phase 0a: Shell sandbox (`agent/sandbox.py`) — blocklist, workspace enforcement, path traversal detection
+- [x] Phase 0a: Integrated sandbox into `agent/tools.py` and `agent/loop.py`
+- [x] Phase 0b: `check_global_budget()` with daily cap, monthly cap, circuit breaker ($2/hr)
+- [x] Phase 0b: Added `get_daily_spend()` and `get_hourly_spend_rate()` to `db/repositories/projects.py`
+- [x] Phase 0b: Wired global budget into `agent/loop.py`
+- [x] Phase 0c: Fixed `_active_worker_count` in `daemon/server.py` (try/finally in `_worker_wrapper`)
+- [x] Phase 0c: Added 2 daemon_mode tests to `test_loop.py`
+- [x] Phase 0c: Created `test_lifecycle.py` with 13 tests (PID file scenarios, startup/shutdown)
+- [x] Phase 0d: Created `mantis/runtime/` package (interface, legacy, deepagents stub, registry)
+- [x] Phase 0d: Created `test_runtime.py` with 22 tests
+- [x] Created `tests/test_sandbox.py` with 31 tests
+- [x] Created `tests/test_budget_global.py` with 12 tests
+- [x] Fixed F821 bug: `budget_config` referenced before definition in `loop.py`
+- [x] Devil's Advocate review: 2 minor gaps documented (audit log DB persistence, rlimit enforcement)
 
 ## Blockers
 None
 
 ## Backlog (carried + new)
 
-### Phase 7 Full (next sprint)
+### Phase 1: OpenRouter + Deep Agents Foundation (next)
+- [ ] OpenRouter adapter via `langchain-openai` (NOT langchain-openrouter)
+- [ ] First Deep Agent (Code Writer) with `create_deep_agent()`
+- [ ] MantisConfig settings extension
+- [ ] Dependencies: deepagents==0.4.1, langchain-openai>=0.3.0, langgraph>=0.2.0
+
+### Phase 2: FastAPI REST Layer
+- [ ] POST/GET /tasks, GET /daemon/status, POST /daemon/stop, GET /health
+- [ ] FastAPI alongside Unix socket (no breaking change)
+
+### Carried from Phase 0 (minor gaps)
+- [ ] Tool audit log persistence to `tool_audit_log` table (structlog covers for now)
+- [ ] Process resource limits (rlimit) — deferred to Docker containerization
+- [ ] Budget snapshot daily rollups
+- [ ] Auto-sync TypeScript models from Python
+- [ ] Test for lifecycle.py Redis startup failure path (RuntimeError) — already tested
+
+### Phase 7 Full (deferred)
 - [ ] GitHub webhooks (HTTP listener)
 - [ ] REST API / HTTP control plane
 - [ ] WebSocket for dashboard live updates
 - [ ] Background daemonization (fork/detach)
-- [ ] Custom scheduled tasks from DB (`load_custom_jobs` stub)
-- [ ] In-flight task crash recovery (Redis SET for in-progress tasks)
-- [ ] Integration smoke test: start daemon, submit task, verify end-to-end
-
-### Carried from Phase 3+
-- [ ] Tool audit log persistence
-- [ ] Budget snapshot daily rollups
-- [ ] Dashboard API integration with Postgres
-- [ ] Add `terminal_reason` column to `agent_sessions`
-- [ ] Budget alert webhooks — Slack/Telegram
-- [ ] MCP tool servers — GitHub, Supabase, Brave (Phase 5)
-- [ ] Ollama local model routing (Phase 6)
-
-### Housekeeping (carried)
-- [ ] `_active_worker_count` never incremented in server.py (heartbeat reports 0)
-- [ ] Auto-sync TypeScript models from Python
-- [ ] Add daemon_mode=True tests to test_loop.py (observer flag)
-- [ ] Lifecycle test file for PID file + stale PID scenarios
-- [ ] Test for lifecycle.py Redis startup failure path (RuntimeError)
 
 ## Next Handoff
-Tomorrow: Phase 7 Full (webhooks + REST API) via planning-prompts-skill | 2 builders (Sonnet) | Est: 3h, $8-12 | Observer notes: `_active_worker_count` never incremented (cosmetic)
+Tomorrow: Phase 1 (OpenRouter + Deep Agents Foundation) — OpenRouter adapter, first Deep Agent, settings extension. Est: 3 days. Requires: deepagents==0.4.1 pin investigation for API stability.
 
 ## Tech Stack
 Python 3.12 (Click + Pydantic + litellm + asyncpg + structlog + Rich + redis + apscheduler) | Next.js 15 (React 19, Tailwind v4) | PostgreSQL 16 | Redis 7 | LiteLLM | Docker Compose
 
 ## Session Stats
-- New files: 8 (3 source + 3 test + 1 conftest + 1 contract)
-- Modified files: 11 (7 source/config + 4 test)
-- Lines shipped: ~577 new + ~399 modified = ~976 total
-- Tests: 140 existing + 36 new = 176 total, all passing
-- Observer findings: 0 BLOCKERs, 2 WARNINGs (carried, not new)
-- Deps cleaned: -2 unused runtime (supabase, prometheus-client), +1 dev (fakeredis)
+- New files: 8 (4 source in mantis/ + sandbox.py + 4 test files)
+- Modified files: 7 (tools.py, loop.py, cost_guard.py, server.py, projects.py, test_loop.py, test_tools.py)
+- Tests: 176 existing + 86 new = 262 total, all passing
+- Lint: clean (ruff check)
+- Security: gitleaks clean, 0 secrets in src/
 
 ## Links
 - GitHub: https://github.com/ScientiaCapital/silkroute
@@ -75,4 +69,4 @@ Python 3.12 (Click + Pydantic + litellm + asyncpg + structlog + Rich + redis + a
 
 ---
 
-_Updated by Phase 7b completion. 2026-02-22._
+_Updated by Phase 0 completion. 2026-02-28._
