@@ -178,6 +178,21 @@ class MantisConfig(BaseSettings):
     )
 
 
+class ApiConfig(BaseSettings):
+    """FastAPI REST layer configuration."""
+
+    model_config = SettingsConfigDict(env_prefix="SILKROUTE_API_")
+
+    host: str = Field(default="0.0.0.0", description="API bind address")
+    port: int = Field(default=8787, description="API listen port")
+    api_key: str = Field(default="", description="Bearer token for auth (empty = disabled)")
+    cors_origins: list[str] = Field(
+        default=["http://localhost:3000"],
+        description="Allowed CORS origins",
+    )
+    queue_maxsize: int = Field(default=100, description="Max pending tasks in queue")
+
+
 class DatabaseConfig(BaseSettings):
     """PostgreSQL and Redis connection settings."""
 
@@ -211,6 +226,7 @@ class SilkRouteSettings(BaseSettings):
     daemon: DaemonConfig = Field(default_factory=DaemonConfig)
     database: DatabaseConfig = Field(default_factory=DatabaseConfig)
     mantis: MantisConfig = Field(default_factory=MantisConfig)
+    api: ApiConfig = Field(default_factory=ApiConfig)
 
     # Global
     hardware_profile: HardwareProfile = Field(

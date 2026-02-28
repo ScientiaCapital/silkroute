@@ -208,6 +208,33 @@ def models(tier: str, capability: str | None) -> None:
     )
 
 
+@main.command()
+@click.option("--host", default="0.0.0.0", help="Bind address")
+@click.option("--port", "-p", default=8787, type=int, help="Listen port")
+@click.option("--reload", is_flag=True, default=False, help="Enable auto-reload (dev)")
+def api(host: str, port: int, reload: bool) -> None:
+    """Start the SilkRoute REST API server.
+
+    Launches a FastAPI server via uvicorn at the given host:port.
+    Swagger docs available at http://{host}:{port}/docs
+    """
+    import uvicorn
+
+    console.print("[bold]SilkRoute API Server[/bold]")
+    console.print(f"  Host: {host}")
+    console.print(f"  Port: {port}")
+    console.print(f"  Docs: http://{host}:{port}/docs")
+    console.print()
+
+    uvicorn.run(
+        "silkroute.api.app:create_app",
+        host=host,
+        port=port,
+        reload=reload,
+        factory=True,
+    )
+
+
 @main.group(invoke_without_command=True)
 @click.option("--foreground", "-f", is_flag=True, default=True, help="Run in foreground (default)")
 @click.pass_context
