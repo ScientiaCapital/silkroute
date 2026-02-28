@@ -150,6 +150,34 @@ class DaemonConfig(BaseSettings):
     )
 
 
+class MantisConfig(BaseSettings):
+    """Mantis multi-agent framework settings."""
+
+    model_config = SettingsConfigDict(env_prefix="SILKROUTE_MANTIS_")
+
+    runtime: str = Field(default="legacy", description="Runtime backend: legacy | deepagents")
+    default_model: str = Field(
+        default="deepseek/deepseek-v3.2",
+        description="Default model for Mantis agents",
+    )
+    code_writer_model: str = Field(
+        default="qwen/qwen3-coder",
+        description="Model for code writing tasks",
+    )
+    max_iterations: int = Field(
+        default=50,
+        description="Max recursion limit for Deep Agents (LangGraph recursion_limit)",
+    )
+    budget_limit_usd: float = Field(default=5.0, description="Per-task budget cap in USD")
+    default_backend: str = Field(
+        default="local_shell",
+        description="Deep Agents backend: local_shell | filesystem | state",
+    )
+    enable_subagents: bool = Field(
+        default=False, description="Enable sub-agent spawning (Phase 2+)"
+    )
+
+
 class DatabaseConfig(BaseSettings):
     """PostgreSQL and Redis connection settings."""
 
@@ -182,6 +210,7 @@ class SilkRouteSettings(BaseSettings):
     agent: AgentConfig = Field(default_factory=AgentConfig)
     daemon: DaemonConfig = Field(default_factory=DaemonConfig)
     database: DatabaseConfig = Field(default_factory=DatabaseConfig)
+    mantis: MantisConfig = Field(default_factory=MantisConfig)
 
     # Global
     hardware_profile: HardwareProfile = Field(

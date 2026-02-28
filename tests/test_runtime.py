@@ -169,13 +169,61 @@ class TestLegacyRuntime:
 
 
 class TestDeepAgentsRuntime:
-    """DeepAgentsRuntime stub behavior."""
+    """DeepAgentsRuntime delegates to code_writer."""
 
     @pytest.mark.asyncio
-    async def test_invoke_raises_not_implemented(self) -> None:
+    async def test_invoke_without_deepagents_raises(self) -> None:
+        """When deepagents is not importable, raise NotImplementedError."""
         runtime = DeepAgentsRuntime()
-        with pytest.raises(NotImplementedError, match="deepagents"):
-            await runtime.invoke("Do task")
+        with patch.dict("sys.modules", {"deepagents": None}):
+            with pytest.raises(NotImplementedError, match="deepagents"):
+                await runtime.invoke("Do task")
+
+    @pytest.mark.asyncio
+    async def test_invoke_delegates_to_code_writer(self) -> None:
+        """When deepagents is available, delegates to run_code_writer."""
+        from silkroute.mantis.agents.code_writer import CodeWriterResult
+
+        mock_result = CodeWriterResult(
+            status="completed",
+            output="done",
+            metadata={"runtime": "deepagents", "model": "deepseek/deepseek-v3.2"},
+        )
+
+        with patch(
+            "silkroute.mantis.agents.code_writer.run_code_writer",
+            return_value=mock_result,
+        ) as mock_run:
+            runtime = DeepAgentsRuntime()
+            result = await runtime.invoke("Fix the bug")
+
+        assert result.success is True
+        assert result.output == "done"
+        assert result.metadata["runtime"] == "deepagents"
+        mock_run.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_stream_yields_output(self) -> None:
+        """stream() uses batch-then-yield pattern."""
+        from silkroute.mantis.agents.code_writer import CodeWriterResult
+
+        mock_result = CodeWriterResult(
+            status="completed",
+            output="streamed output",
+            metadata={"runtime": "deepagents", "model": "test"},
+        )
+
+        with patch(
+            "silkroute.mantis.agents.code_writer.run_code_writer",
+            return_value=mock_result,
+        ):
+            runtime = DeepAgentsRuntime()
+            chunks = []
+            async for chunk in runtime.stream("Do task"):
+                chunks.append(chunk)
+
+        assert len(chunks) == 1
+        assert chunks[0] == "streamed output"
 
     def test_name(self) -> None:
         assert DeepAgentsRuntime().name == "deepagents"
