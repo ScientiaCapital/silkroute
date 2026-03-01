@@ -54,11 +54,15 @@ def get_runtime(runtime_type: str | None = None) -> AgentRuntime:
         from silkroute.mantis.orchestrator.runtime import OrchestratorRuntime
 
         _cached_runtime = OrchestratorRuntime()
+    elif rt == RuntimeType.SUPERVISOR:
+        from silkroute.mantis.supervisor.runtime import SupervisorRuntime
+
+        _cached_runtime = SupervisorRuntime()
     else:
         raise ValueError(
             f"Unknown runtime type: {rt!r}. "
             f"Valid options: {RuntimeType.LEGACY!r}, {RuntimeType.DEEP_AGENTS!r}, "
-            f"{RuntimeType.ORCHESTRATOR!r}"
+            f"{RuntimeType.ORCHESTRATOR!r}, {RuntimeType.SUPERVISOR!r}"
         )
 
     _cached_type = rt

@@ -116,3 +116,52 @@ class ProjectBudgetResponse(BaseModel):
     monthly_spent_usd: float
     daily_spent_usd: float
     monthly_limit_usd: float | None = None
+
+
+# --- Supervisor endpoints ---
+
+
+class SupervisorStepRequest(BaseModel):
+    """A step in a supervisor session create request."""
+
+    name: str = Field(..., min_length=1)
+    description: str = Field(default="", description="Task description for the step")
+    depends_on: list[str] = Field(default_factory=list)
+    runtime_type: str = Field(default="orchestrator")
+    max_retries: int = Field(default=2, ge=0, le=10)
+    condition: str | None = Field(default=None, description="Condition expression")
+
+
+class SupervisorSessionCreateRequest(BaseModel):
+    """POST /supervisor/sessions request body."""
+
+    description: str = Field(..., min_length=1)
+    project_id: str = Field(default="default")
+    steps: list[SupervisorStepRequest] = Field(..., min_length=1)
+    total_budget_usd: float = Field(default=10.0, ge=0.01, le=100.0)
+    timeout_seconds: int = Field(default=3600, ge=60, le=86400)
+
+
+class SupervisorStepResponse(BaseModel):
+    """A step in a supervisor session response."""
+
+    id: str
+    name: str
+    status: str
+    cost_usd: float = 0.0
+    output: str = ""
+    error: str = ""
+    retry_count: int = 0
+
+
+class SupervisorSessionResponse(BaseModel):
+    """Supervisor session response."""
+
+    id: str
+    project_id: str
+    status: str
+    total_cost_usd: float = 0.0
+    steps: list[SupervisorStepResponse] = Field(default_factory=list)
+    created_at: str = ""
+    updated_at: str = ""
+    error: str = ""

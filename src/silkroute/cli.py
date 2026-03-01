@@ -392,6 +392,119 @@ def daemon_stop() -> None:
         raise SystemExit(1)
 
 
+@main.group()
+def supervisor() -> None:
+    """Manage supervisor workflows (long-running compound tasks)."""
+    pass
+
+
+@supervisor.command("create")
+@click.argument("description")
+@click.option("--project", "-p", default="default", help="Project ID")
+@click.option("--budget", "-b", default=10.0, type=float, help="Total budget in USD")
+def supervisor_create(description: str, project: str, budget: float) -> None:
+    """Create and execute a supervisor session.
+
+    DESCRIPTION: Task description (use numbered steps: "1. review 2. fix 3. test")
+    """
+    import asyncio
+
+    from silkroute.mantis.runtime.interface import AgentResult, RuntimeConfig
+    from silkroute.mantis.supervisor.runtime import SupervisorRuntime
+
+    rt = SupervisorRuntime()
+
+    async def _run() -> AgentResult:
+        result = await rt.invoke(
+            description,
+            RuntimeConfig(project_id=project, budget_limit_usd=budget),
+        )
+        return result
+
+    try:
+        result = asyncio.run(_run())
+        if result.success:
+            console.print(f"[green]Session completed[/green]: {result.session_id}")
+            console.print(f"  Steps: {result.metadata.get('step_count', 0)}")
+            console.print(f"  Cost: ${result.cost_usd:.4f}")
+            if result.output:
+                console.print(f"\n[bold]Output:[/bold]\n{result.output[:500]}")
+        else:
+            console.print(f"[red]Session failed[/red]: {result.error}")
+            raise SystemExit(1)
+    except KeyboardInterrupt:
+        console.print("\n[yellow]Supervisor interrupted.[/yellow]")
+    except Exception as e:
+        console.print(f"\n[red]Supervisor error: {e}[/red]")
+        raise SystemExit(1) from e
+
+
+@supervisor.command("status")
+@click.option("--session-id", "-s", default=None, help="Session ID to query")
+def supervisor_status(session_id: str | None) -> None:
+    """Show supervisor session status."""
+    if session_id:
+        console.print(f"[bold]Supervisor Session: {session_id}[/bold]")
+        console.print("[yellow]Session query requires database — use the API instead.[/yellow]")
+        console.print(f"  curl http://localhost:8787/supervisor/sessions/{session_id}")
+    else:
+        console.print("[bold]Supervisor Status[/bold]")
+        console.print("  Use --session-id to query a specific session,")
+        console.print("  or the API: curl http://localhost:8787/supervisor/sessions")
+
+
+@supervisor.command("resume")
+@click.argument("session_id")
+def supervisor_resume(session_id: str) -> None:
+    """Resume a paused or failed supervisor session."""
+    console.print(f"[bold]Resuming session: {session_id}[/bold]")
+    console.print("[yellow]Resume requires database — use the API:[/yellow]")
+    console.print(f"  curl -X POST http://localhost:8787/supervisor/sessions/{session_id}/resume")
+
+
+@supervisor.command("cancel")
+@click.argument("session_id")
+def supervisor_cancel(session_id: str) -> None:
+    """Cancel a supervisor session."""
+    console.print(f"[bold]Cancelling session: {session_id}[/bold]")
+    console.print("[yellow]Cancel requires database — use the API:[/yellow]")
+    console.print(f"  curl -X DELETE http://localhost:8787/supervisor/sessions/{session_id}")
+
+
+@supervisor.command("ralph")
+@click.option("--once", is_flag=True, default=False, help="Run one cycle and exit")
+def supervisor_ralph(once: bool) -> None:
+    """Start Ralph Mode (autonomous supervisor loop).
+
+    By default, starts as a scheduled cron job via the daemon scheduler.
+    Use --once to run a single cycle and exit.
+    """
+    import asyncio
+
+    if once:
+        from silkroute.config.settings import BudgetConfig, SupervisorConfig
+        from silkroute.mantis.supervisor.ralph import RalphController
+
+        controller = RalphController(
+            supervisor_config=SupervisorConfig(enabled=True),
+            budget_config=BudgetConfig(),
+        )
+
+        console.print("[bold]Ralph Mode — single cycle[/bold]")
+        try:
+            result = asyncio.run(controller.run_cycle())
+            console.print(f"  Status: {result.get('status', 'unknown')}")
+            if result.get("plans_executed"):
+                console.print(f"  Plans executed: {result['plans_executed']}")
+        except KeyboardInterrupt:
+            console.print("\n[yellow]Ralph cycle interrupted.[/yellow]")
+    else:
+        console.print("[bold]Ralph Mode[/bold]")
+        console.print("  Ralph Mode runs as part of the daemon scheduler.")
+        console.print("  Enable with: SILKROUTE_SUPERVISOR_ENABLED=true")
+        console.print("  Start daemon: silkroute daemon")
+
+
 def _default_config() -> str:
     """Generate default silkroute.toml configuration."""
     return """\

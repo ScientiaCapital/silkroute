@@ -13,7 +13,7 @@ from apscheduler.jobstores.redis import RedisJobStore
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 
-from silkroute.config.settings import DaemonConfig, DatabaseConfig
+from silkroute.config.settings import DaemonConfig, DatabaseConfig, SupervisorConfig
 from silkroute.daemon.queue import TaskQueue, TaskRequest
 
 log = structlog.get_logger()
@@ -24,11 +24,20 @@ class DaemonScheduler:
 
     Uses a Redis job store so scheduled jobs persist across daemon restarts.
     Built-in jobs: nightly repository scan, weekly dependency audit.
+    Optional: Ralph Mode autonomous cycle.
     """
 
-    def __init__(self, config: DaemonConfig, queue: TaskQueue) -> None:
+    def __init__(
+        self,
+        config: DaemonConfig,
+        queue: TaskQueue,
+        supervisor_config: SupervisorConfig | None = None,
+        db_pool: object | None = None,
+    ) -> None:
         self._config = config
         self._queue = queue
+        self._supervisor_config = supervisor_config
+        self._db_pool = db_pool
         self._scheduler: AsyncIOScheduler | None = None
 
     def start(self) -> None:
@@ -81,6 +90,21 @@ class DaemonScheduler:
             cron=self._config.dependency_check_cron,
         )
 
+        # Register Ralph Mode job (if supervisor is enabled)
+        if self._supervisor_config and self._supervisor_config.enabled:
+            self._scheduler.add_job(
+                self._ralph_cycle,
+                trigger=CronTrigger.from_crontab(self._supervisor_config.ralph_cron),
+                id="ralph_cycle",
+                name="Ralph Mode autonomous cycle",
+                replace_existing=True,
+            )
+            log.info(
+                "scheduler_job_registered",
+                job_id="ralph_cycle",
+                cron=self._supervisor_config.ralph_cron,
+            )
+
         self._scheduler.start()
         log.info("scheduler_started", job_count=len(self._scheduler.get_jobs()))
 
@@ -127,3 +151,19 @@ class DaemonScheduler:
             max_iterations=15,
         )
         await self._queue.submit(request)
+
+    async def _ralph_cycle(self) -> None:
+        """Run one Ralph Mode autonomous cycle."""
+        log.info("scheduler_ralph_cycle_triggered")
+
+        from silkroute.config.settings import BudgetConfig
+        from silkroute.mantis.supervisor.ralph import RalphController
+
+        controller = RalphController(
+            queue=self._queue,
+            supervisor_config=self._supervisor_config,
+            budget_config=BudgetConfig(),
+            db_pool=self._db_pool,
+        )
+        result = await controller.run_cycle()
+        log.info("scheduler_ralph_cycle_done", result_status=result.get("status"))

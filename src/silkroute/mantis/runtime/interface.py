@@ -20,6 +20,7 @@ class RuntimeType:
     LEGACY = "legacy"
     DEEP_AGENTS = "deepagents"
     ORCHESTRATOR = "orchestrator"
+    SUPERVISOR = "supervisor"
 
 
 @dataclass

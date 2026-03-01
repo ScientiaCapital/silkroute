@@ -184,6 +184,22 @@ class MantisConfig(BaseSettings):
     )
 
 
+class SupervisorConfig(BaseSettings):
+    """Supervisor and Ralph Mode configuration."""
+
+    model_config = SettingsConfigDict(env_prefix="SILKROUTE_SUPERVISOR_")
+
+    enabled: bool = Field(default=False, description="Enable supervisor runtime")
+    max_steps: int = Field(default=20, description="Max steps per supervisor plan")
+    step_timeout_seconds: int = Field(default=300, description="Per-step timeout")
+    session_timeout_seconds: int = Field(default=3600, description="Per-session timeout")
+    checkpoint_enabled: bool = Field(default=True, description="Persist checkpoints to DB")
+    max_retries: int = Field(default=2, description="Default step retry count")
+    retry_backoff_seconds: float = Field(default=5.0, description="Base retry backoff")
+    ralph_cron: str = Field(default="*/30 * * * *", description="Ralph Mode cron schedule")
+    ralph_budget_usd: float = Field(default=5.0, description="Per-cycle Ralph budget")
+
+
 class ApiConfig(BaseSettings):
     """FastAPI REST layer configuration."""
 
@@ -236,6 +252,7 @@ class SilkRouteSettings(BaseSettings):
     database: DatabaseConfig = Field(default_factory=DatabaseConfig)
     mantis: MantisConfig = Field(default_factory=MantisConfig)
     api: ApiConfig = Field(default_factory=ApiConfig)
+    supervisor: SupervisorConfig = Field(default_factory=SupervisorConfig)
 
     # Global
     hardware_profile: HardwareProfile = Field(

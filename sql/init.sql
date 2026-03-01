@@ -179,3 +179,24 @@ LEFT JOIN cost_logs cl
     ON cl.project_id = p.id
     AND cl.created_at >= DATE_TRUNC('month', NOW())
 GROUP BY p.id, p.name, p.budget_monthly_usd;
+
+-- ============================================================
+-- Supervisor Sessions — long-running compound workflows
+-- ============================================================
+CREATE TABLE IF NOT EXISTS supervisor_sessions (
+    id              TEXT PRIMARY KEY,
+    project_id      TEXT NOT NULL REFERENCES projects(id),
+    status          TEXT NOT NULL DEFAULT 'pending'
+        CHECK (status IN ('pending', 'running', 'paused', 'completed', 'failed', 'cancelled')),
+    plan_json       JSONB NOT NULL DEFAULT '{}'::jsonb,
+    checkpoint_json JSONB DEFAULT NULL,
+    context_json    JSONB NOT NULL DEFAULT '{}'::jsonb,
+    total_cost_usd  NUMERIC(10, 6) NOT NULL DEFAULT 0.0,
+    config_json     JSONB NOT NULL DEFAULT '{}'::jsonb,
+    error           TEXT DEFAULT '',
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_supervisor_sessions_project ON supervisor_sessions(project_id);
+CREATE INDEX IF NOT EXISTS idx_supervisor_sessions_status ON supervisor_sessions(status);
