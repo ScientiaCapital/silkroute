@@ -1,46 +1,41 @@
 # silkroute
 
-**Branch**: main | **Updated**: 2026-02-28
+**Branch**: main | **Updated**: 2026-03-01
 
 ## Status
-Phase 4 (Supervisor + Ralph Mode) complete on `main`. SupervisorRuntime with sequential step execution, retry/checkpoint/context-passing, RalphController autonomous loop, 3 new middleware, 4 backlog fixes, API endpoints, CLI commands. 493/493 tests passing. Lint clean. 0 observer BLOCKERs/CRITICALs.
+Phase 5 (Skills + Context7 + Tools) complete on `main`. Skills framework with 5 built-in skills, Context7 REST client, ContextManager with scoping/versioning, LLMDecomposer, 4 new agent tools (http_request, search_grep, git_ops, env_info), API endpoints, CLI commands, skill_executions DB table, 3 backlog fixes (W1/W2/W4). 691/693 tests passing (2 pre-existing: deepagents optional dep). Lint clean. 0 observer BLOCKERs/CRITICALs.
 
-## Done (This Session --- Phase 4)
-- [x] Created `mantis/supervisor/` package: models, runtime, ralph, __init__ (4 modules)
-- [x] SupervisorRuntime implementing AgentRuntime Protocol with sequential step execution
-- [x] Inter-step context passing via plan.context[step_id], JSONB serializable
-- [x] Retry with exponential backoff, configurable per-step max_retries
-- [x] Safe structured condition evaluation (key existence, status comparison, contains)
-- [x] Checkpoint persistence to supervisor_sessions table
-- [x] RalphController autonomous loop via DaemonScheduler cron
-- [x] 3 new middleware: RetryMiddleware, CheckpointMiddleware, AlertMiddleware
-- [x] Backlog W1: narrowed except in orchestrator stream
-- [x] Backlog W2: atomic budget via try_reserve()/settle()
-- [x] Backlog W3: immutable allocate_budget() with copy.deepcopy
-- [x] Backlog R2: parallel sub-task execution via asyncio.gather
-- [x] API: POST/GET/DELETE /supervisor/sessions, POST .../resume
-- [x] CLI: silkroute supervisor create|status|resume|cancel|ralph
-- [x] SupervisorConfig (SILKROUTE_SUPERVISOR_ env prefix)
-- [x] supervisor_sessions DB table + indexes
-- [x] 83 new tests (493 total), ruff clean, gitleaks clean
+## Done (This Session --- Phase 5)
+- [x] Created `mantis/skills/` package: models, registry, context7, builtin/ (5 skills)
+- [x] Created `mantis/context/` package: models, manager (scoped, versioned, token-aware)
+- [x] LLMDecomposer with LRU cache + KeywordDecomposer fallback (W4 fix)
+- [x] 4 new tools in agent/tools.py: http_request (SSRF-safe), search_grep, git_ops (allowlist), env_info (secret-filtered)
+- [x] SkillsConfig + Context7Config in settings.py
+- [x] API: GET /skills, GET /skills/{id}, POST /context7/resolve, POST /context7/query
+- [x] CLI: silkroute skills list|info, silkroute context7 resolve|query
+- [x] skill_executions DB table + indexes
+- [x] Backlog W1: narrowed except in ralph.py
+- [x] Backlog W2: visible checkpoint failures (log.warning)
+- [x] Backlog W4: LLMDecomposer replaces KeywordDecomposer
+- [x] ~200 new tests (691 total), ruff clean, gitleaks clean
 
 ## Blockers
 None
 
 ## Tomorrow
-Tomorrow: Phase 5 (Skills + Context7 + tools) via planning-prompts | Sonnet builder + Haiku observer | Est: 1-2 sessions, ~$5 | Observer notes: W1 broad except in ralph, W2 silent checkpoint loss, W4 naive keyword decomposer
+Tomorrow: Phase 6 (Multi-project + Dashboard) via planning-prompts | Sonnet builder + Haiku observer | Est: 2-3 sessions, ~$8 | Observer notes: SSRF dual-impl drift risk, ContextManager not yet wired into SupervisorRuntime, skill_executions repo missing
 
 ## Tech Stack
-Python 3.12 (Click + Pydantic + FastAPI + uvicorn + litellm + asyncpg + structlog + Rich + redis + apscheduler + deepagents + langchain-openai) | Next.js 15 (React 19, Tailwind v4) | PostgreSQL 16 | Redis 7 | LiteLLM | Docker Compose
+Python 3.12 (Click + Pydantic + FastAPI + uvicorn + litellm + asyncpg + structlog + Rich + redis + apscheduler + deepagents + langchain-openai + httpx) | Next.js 15 (React 19, Tailwind v4) | PostgreSQL 16 | Redis 7 | LiteLLM | Docker Compose
 
 ## Session Stats
-- New files: 16 (6 source + 7 test + 3 meta)
-- Modified files: 16 (12 source + 1 test + 3 meta)
-- Tests: 410 existing + 83 new = 493 total, all passing
+- New files: 21 (12 source + 9 test)
+- Modified files: 13 (11 source + 1 test + 1 meta)
+- Tests: 493 existing + ~200 new = 691 passing (2 pre-existing failures)
 - Lint: clean (ruff check)
 - Security: gitleaks clean, 0 secrets
-- Lines: +3,406 new, +701/-72 modified
-- Observer: 0 BLOCKER, 0 CRITICAL, 2 WARNING (logged to Backlog)
+- Lines: +4,008 new code, +810/-20 modified
+- Observer: 0 BLOCKER, 0 CRITICAL, 1 WARNING (logged to Backlog)
 
 ## Links
 - GitHub: https://github.com/ScientiaCapital/silkroute
@@ -50,4 +45,4 @@ Python 3.12 (Click + Pydantic + FastAPI + uvicorn + litellm + asyncpg + structlo
 
 ---
 
-_Updated by Phase 4 completion. 2026-02-28._
+_Updated by Phase 5 completion. 2026-03-01._
