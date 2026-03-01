@@ -3,40 +3,36 @@
 **Branch**: main | **Updated**: 2026-03-01
 
 ## Status
-Phase 6b (ContextManager Wiring + skill_executions + Task History) complete on `main`. All 3 deferred items from Phase 6 resolved. 785/785 tests passing (0 failures). Lint clean. Dashboard build clean (5 pages). 0 observer BLOCKERs/CRITICALs. All Phases 0-6b complete.
+Phase 7 (Daemon Hardening + Budget Rollups) complete on `main`. All 3 tech debt items resolved: exception hardening (#5), budget rollups (#7), SkillRegistry caching (#4). 800 tests passing (6 pre-existing deepagents failures). Lint clean. Dashboard build clean (5 pages). 0 observer BLOCKERs/CRITICALs. All Phases 0-7 complete.
 
-## Done (This Session — Phase 6b)
-- [x] Created `db/repositories/skill_executions.py` — INSERT, LIST, STATS functions
-- [x] Wired fire-and-forget persistence into `SkillRegistry.execute()` with timing
-- [x] Added `db_pool`, `session_id`, `project_id` fields to SkillContext
-- [x] Wired ContextManager into SupervisorRuntime (`_run_session`, `stream`, `_execute_step`)
-- [x] Dual-write pattern: ContextManager + plan.context sync for backward compat
-- [x] Added `GET /supervisor/sessions` list endpoint (before `{session_id}` route)
-- [x] Created `dashboard/src/app/tasks/page.tsx` — session cards, step progress bars
-- [x] Added TypeScript types, fetch function, nav link for task history
-- [x] 36 new tests (13 skill_executions + 3 ContextManager + 3 API + 17 modified)
-- [x] Backlog items #1, #3, #18 RESOLVED
-- [x] Observer: 0 BLOCKER, 0 CRITICAL, 2 INFO logged
+## Done (This Session — Phase 7)
+- [x] Exception hardening: four-clause pattern across 9 files (CancelledError/transient/permanent/fallback)
+- [x] Budget snapshot rollups: repository + scheduler cron + GET /budget/snapshots endpoint
+- [x] SkillRegistry caching: app.state singleton via Depends(get_skill_registry)
+- [x] 29 new tests (9 exception + 20 budget + 3 scheduler updated)
+- [x] Parallel worktree execution: 3 builders, zero merge conflicts
+- [x] Backlog items #4, #5, #7 RESOLVED
+- [x] Observer: 0 BLOCKER, 0 CRITICAL, 0 WARNING, 3 INFO logged
 
 ## Blockers
 None
 
 ## Tomorrow
-Tomorrow: Phase 7 (daemon hardening + budget rollups) via planning-prompts | Sonnet builder + Haiku observer | Est: 1-2 sessions, ~$6-8 | Observer notes: broad except in retry loops (#5), budget snapshot daily rollups (#7), SkillRegistry caching (#4)
+Tomorrow: Phase 8 (test coverage gaps + CLI testing) via planning-prompts | Sonnet builder + Haiku observer | Est: 1 session, ~$4-6 | Observer notes: lifespan test (#8), CLI unit tests (#10), SSE error path test (#9)
 
 ## Tech Stack
 Python 3.12 (Click + Pydantic + FastAPI + uvicorn + litellm + asyncpg + structlog + Rich + redis + apscheduler + deepagents + langchain-openai + httpx) | Next.js 15 (React 19, Tailwind v4) | PostgreSQL 16 | Redis 7 | LiteLLM | Docker Compose
 
 ## Session Stats
-- New files: 3 (1 Python repo + 1 Python test + 1 TypeScript page)
-- Modified files: 9 (5 Python + 3 TypeScript + 1 TSX)
-- Tests: 749 existing + 36 new = 785 passing (0 failures)
+- New files: 4 (2 Python + 2 test)
+- Modified files: 17 (15 Python + 2 test)
+- Tests: 785 existing + 29 new = 800 passing (6 pre-existing failures)
 - Lint: clean (ruff check)
 - Security: gitleaks clean, 0 secrets
-- Lines: +641 new, -23 removed (net +618)
-- Observer: 0 BLOCKER, 0 CRITICAL, 0 WARNING, 2 INFO (logged)
-- Commits: 4 (3 feat + 1 chore)
-- Cost: ~$3.50 estimated
+- Lines: +1,113 new, -37 removed (net +1,076)
+- Observer: 0 BLOCKER, 0 CRITICAL, 0 WARNING, 3 INFO (logged)
+- Commits: 9 (4 fix + 1 feat + 2 merge + 2 chore)
+- Cost: ~$8.50 estimated
 
 ## Links
 - GitHub: https://github.com/ScientiaCapital/silkroute
@@ -46,4 +42,4 @@ Python 3.12 (Click + Pydantic + FastAPI + uvicorn + litellm + asyncpg + structlo
 
 ---
 
-_Updated by Phase 6b completion. 2026-03-01._
+_Updated by Phase 7 completion. 2026-03-01._
