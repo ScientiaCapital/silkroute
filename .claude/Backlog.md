@@ -1,13 +1,11 @@
 # SilkRoute Backlog
 
-**Updated:** 2026-03-01 (Phase 6 complete)
+**Updated:** 2026-03-01 (Phase 6b complete)
 
-## Priority: High (resolve in Phase 6b/7)
+## Priority: High (resolve in Phase 7)
 
 | # | Item | Source | Effort | Impact | Owner | ETA |
 |---|------|--------|--------|--------|-------|-----|
-| 1 | Wire ContextManager into SupervisorRuntime._run_session() (wrap plan.context) | Phase 5 plan gap | S | Medium | --- | Phase 6b |
-| 3 | Add skill_executions DB repository (table exists, no write code) | Phase 5 plan gap | S | Medium | --- | Phase 6b |
 | 5 | Broad `except Exception` in retry loops (orchestrator:270, supervisor:313) | Devil's Advocate (Phase 4) | S | Low | --- | Phase 7 |
 | 7 | Budget snapshot daily rollups | Backlog carry-forward | M | Medium | --- | Phase 7 |
 
@@ -21,6 +19,8 @@
 | 9 | Add test for SSE stream error path (`[ERROR]` event) | Observer WARNING (Phase 2) | XS | Low | --- | Phase 7 |
 | 10 | CLI commands (skills list/info, context7 resolve/query, projects) not unit-tested | Observer INFO (Phase 5+6) | S | Low | --- | Phase 7 |
 | 17 | Dashboard ESLint configuration (`next lint` requires setup) | Observer INFO (Phase 6) | XS | Low | --- | Phase 7 |
+| 19 | SupervisorSessionResponse construction repeated in 3 routes — extract helper | Observer INFO (Phase 6b) | XS | Low | --- | Phase 7 |
+| 20 | Supervisor route ordering risk: future routes must maintain GET /sessions before GET /sessions/{id} | Observer INFO (Phase 6b) | XS | Low | --- | Phase 7 |
 
 ## Priority: Low (future phases)
 
@@ -32,19 +32,21 @@
 | 14 | Background daemonization (fork/detach) | Phase 7 Full | M | Medium | --- | Future |
 | 15 | API rate limiting tiers | Plan scope exclusion (Phase 2) | M | Medium | --- | Future |
 | 16 | Ralph autonomy boundary — no human approval gate | Observer R1 (Phase 4) | M | Low | --- | Future |
-| 18 | Task history page in dashboard | Phase 6 plan deferral | M | Medium | --- | Phase 6b |
 
-## Resolved (This Session — Phase 6)
+## Resolved (This Session — Phase 6b)
 
 | Item | Resolution |
 |------|-----------|
-| Consolidate SSRF protection into shared util (#2) | RESOLVED — unified in `network/ssrf.py`, both tools.py and http_skill.py import from it |
-| SSRF dual implementation drift risk | RESOLVED — single source of truth eliminates drift |
+| Wire ContextManager into SupervisorRuntime (#1) | RESOLVED — dual-write pattern in _run_session() + stream() + _execute_step() |
+| Add skill_executions DB repository (#3) | RESOLVED — skill_executions.py with INSERT, LIST, STATS + fire-and-forget in SkillRegistry |
+| Task history page in dashboard (#18) | RESOLVED — tasks/page.tsx with session cards, step progress bars, status badges |
 
 ## Resolved (Previous Sessions)
 
 | Item | Resolution |
 |------|-----------|
+| Consolidate SSRF protection into shared util (#2) | RESOLVED — unified in `network/ssrf.py` (Phase 6) |
+| SSRF dual implementation drift risk | RESOLVED — single source of truth (Phase 6) |
 | Broad `except Exception` in RalphController.run_cycle() (W1) | Narrowed to specific types (Phase 5) |
 | Silent checkpoint failure logging (W2) | log.warning with error string (Phase 5) |
 | Naive keyword decomposer (W4) | LLMDecomposer with cache + fallback (Phase 5) |
