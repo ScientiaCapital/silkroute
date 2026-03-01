@@ -1,26 +1,25 @@
 # SilkRoute Backlog
 
-**Updated:** 2026-03-01 (Phase 6b complete)
+**Updated:** 2026-03-01 (Phase 7 complete)
 
-## Priority: High (resolve in Phase 7)
-
-| # | Item | Source | Effort | Impact | Owner | ETA |
-|---|------|--------|--------|--------|-------|-----|
-| 5 | Broad `except Exception` in retry loops (orchestrator:270, supervisor:313) | Devil's Advocate (Phase 4) | S | Low | --- | Phase 7 |
-| 7 | Budget snapshot daily rollups | Backlog carry-forward | M | Medium | --- | Phase 7 |
-
-## Priority: Medium (resolve in Phase 7+)
+## Priority: High (resolve in Phase 8)
 
 | # | Item | Source | Effort | Impact | Owner | ETA |
 |---|------|--------|--------|--------|-------|-----|
-| 4 | Cache SkillRegistry as app.state in API (currently per-request creation) | Observer INFO (Phase 5) | XS | Low | --- | Phase 7 |
+| 8 | Add test for lifespan Redis/DB connect+disconnect | Observer WARNING (Phase 2) | S | Medium | --- | Phase 8 |
+| 10 | CLI commands (skills list/info, context7 resolve/query, projects) not unit-tested | Observer INFO (Phase 5+6) | S | Medium | --- | Phase 8 |
+
+## Priority: Medium
+
+| # | Item | Source | Effort | Impact | Owner | ETA |
+|---|------|--------|--------|--------|-------|-----|
 | 6 | Process rlimit enforcement (memory cap) | Observer WARNING (Phase 0) | M | Low | --- | Docker phase |
-| 8 | Add test for lifespan Redis/DB connect+disconnect | Observer WARNING (Phase 2) | S | Low | --- | Phase 7 |
-| 9 | Add test for SSE stream error path (`[ERROR]` event) | Observer WARNING (Phase 2) | XS | Low | --- | Phase 7 |
-| 10 | CLI commands (skills list/info, context7 resolve/query, projects) not unit-tested | Observer INFO (Phase 5+6) | S | Low | --- | Phase 7 |
-| 17 | Dashboard ESLint configuration (`next lint` requires setup) | Observer INFO (Phase 6) | XS | Low | --- | Phase 7 |
-| 19 | SupervisorSessionResponse construction repeated in 3 routes — extract helper | Observer INFO (Phase 6b) | XS | Low | --- | Phase 7 |
-| 20 | Supervisor route ordering risk: future routes must maintain GET /sessions before GET /sessions/{id} | Observer INFO (Phase 6b) | XS | Low | --- | Phase 7 |
+| 9 | Add test for SSE stream error path (`[ERROR]` event) | Observer WARNING (Phase 2) | XS | Low | --- | Phase 8 |
+| 17 | Dashboard ESLint configuration (`next lint` requires setup) | Observer INFO (Phase 6) | XS | Low | --- | Phase 8 |
+| 19 | SupervisorSessionResponse construction repeated in 3 routes — extract helper | Observer INFO (Phase 6b) | XS | Low | --- | Phase 8 |
+| 20 | Supervisor route ordering risk: future routes must maintain GET /sessions before GET /sessions/{id} | Observer INFO (Phase 6b) | XS | Low | --- | Phase 8 |
+| 21 | `_extract_cost()` still has silent `except Exception: pass` (canonical pattern) | Observer INFO (Phase 7) | XS | Low | --- | Future |
+| 22 | Pre-existing test failures: 6 deepagents + 1 langchain_openai collection error | Observer INFO (Phase 7) | S | Low | --- | Future |
 
 ## Priority: Low (future phases)
 
@@ -33,7 +32,15 @@
 | 15 | API rate limiting tiers | Plan scope exclusion (Phase 2) | M | Medium | --- | Future |
 | 16 | Ralph autonomy boundary — no human approval gate | Observer R1 (Phase 4) | M | Low | --- | Future |
 
-## Resolved (This Session — Phase 6b)
+## Resolved (This Session — Phase 7)
+
+| Item | Resolution |
+|------|-----------|
+| Broad `except Exception` in retry loops (#5) | RESOLVED — four-clause pattern (CancelledError/transient/permanent/fallback) across 9 files |
+| Budget snapshot daily rollups (#7) | RESOLVED — budget_snapshots.py repo + scheduler cron + GET /budget/snapshots endpoint |
+| Cache SkillRegistry as app.state (#4) | RESOLVED — app.state.skill_registry singleton via Depends(get_skill_registry) |
+
+## Resolved (Phase 6b)
 
 | Item | Resolution |
 |------|-----------|
