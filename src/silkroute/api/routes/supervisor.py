@@ -37,6 +37,48 @@ router = APIRouter(
 )
 
 
+@router.get("/sessions")
+async def list_sessions(
+    project_id: str | None = None,
+    status: str | None = None,
+    limit: int = 50,
+    db_pool: asyncpg.Pool | None = Depends(get_db_pool),  # noqa: B008
+) -> list[SupervisorSessionResponse]:
+    """List supervisor sessions with optional filters."""
+    if db_pool is None:
+        raise HTTPException(status_code=503, detail="Database unavailable")
+
+    from silkroute.db.repositories.supervisor import list_supervisor_sessions
+
+    sessions = await list_supervisor_sessions(
+        db_pool, project_id=project_id, status=status, limit=limit,
+    )
+    return [
+        SupervisorSessionResponse(
+            id=s.id,
+            project_id=s.project_id,
+            status=s.status.value,
+            total_cost_usd=s.total_cost_usd,
+            steps=[
+                SupervisorStepResponse(
+                    id=st.id,
+                    name=st.name,
+                    status=st.status.value,
+                    cost_usd=st.cost_usd,
+                    output=st.output,
+                    error=st.error,
+                    retry_count=st.retry_count,
+                )
+                for st in s.plan.steps
+            ],
+            created_at=s.created_at.isoformat(),
+            updated_at=s.updated_at.isoformat(),
+            error=s.error,
+        )
+        for s in sessions
+    ]
+
+
 @router.post("/sessions")
 async def create_session(
     body: SupervisorSessionCreateRequest,

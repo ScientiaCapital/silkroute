@@ -69,3 +69,24 @@ export interface ProjectBudgetResponse {
   daily_spent_usd: number;
   monthly_limit_usd: number | null;
 }
+
+export interface SupervisorStepSummary {
+  id: string;
+  name: string;
+  status: string;
+  cost_usd: number;
+  output: string;
+  error: string;
+  retry_count: number;
+}
+
+export interface SupervisorSession {
+  id: string;
+  project_id: string;
+  status: string;
+  total_cost_usd: number;
+  steps: SupervisorStepSummary[];
+  created_at: string;
+  updated_at: string;
+  error: string;
+}

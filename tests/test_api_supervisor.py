@@ -96,6 +96,40 @@ class TestCreateSession:
         assert resp.status_code == 422
 
 
+class TestListSessions:
+    """GET /supervisor/sessions"""
+
+    def test_list_sessions_no_db(self, client):
+        resp = client.get(
+            "/supervisor/sessions",
+            headers=AUTH_HEADERS,
+        )
+        assert resp.status_code == 503
+
+    @patch("silkroute.db.repositories.supervisor.list_supervisor_sessions")
+    def test_list_sessions_empty(self, mock_list, client):
+        # Override db_pool to non-None so the endpoint proceeds
+        from silkroute.api import deps
+        from unittest.mock import AsyncMock
+        mock_pool = AsyncMock()
+        client.app.dependency_overrides[deps.get_db_pool] = lambda: mock_pool
+        mock_list.return_value = []
+
+        resp = client.get(
+            "/supervisor/sessions",
+            headers=AUTH_HEADERS,
+        )
+        assert resp.status_code == 200
+        assert resp.json() == []
+
+        # Restore
+        client.app.dependency_overrides[deps.get_db_pool] = lambda: None
+
+    def test_list_sessions_no_auth(self, client):
+        resp = client.get("/supervisor/sessions")
+        assert resp.status_code == 401
+
+
 class TestGetSession:
     """GET /supervisor/sessions/{id}"""
 
