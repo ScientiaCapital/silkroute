@@ -52,6 +52,7 @@ class RuntimeInvokeRequest(BaseModel):
     """POST /runtime/invoke request body."""
 
     task: str = Field(..., min_length=1)
+    project_id: str = Field(default="default", description="Project for cost attribution")
     runtime_type: str | None = Field(default=None, description="legacy | deepagents")
     model_override: str | None = None
     max_iterations: int = Field(default=25, ge=1, le=200)
@@ -218,3 +219,47 @@ class Context7QueryResponse(BaseModel):
     snippets: list[dict] = Field(default_factory=list)
     truncated: bool = False
     error: str = ""
+
+
+# --- Project endpoints ---
+
+
+class ProjectCreateRequest(BaseModel):
+    """POST /projects request body."""
+
+    id: str = Field(..., min_length=1, max_length=64, pattern=r"^[a-z0-9][a-z0-9._-]*$")
+    name: str = Field(..., min_length=1, max_length=200)
+    description: str = Field(default="")
+    github_repo: str = Field(default="")
+    budget_monthly_usd: float = Field(default=2.85, ge=0.01, le=1000.0)
+    budget_daily_usd: float = Field(default=0.10, ge=0.01, le=100.0)
+
+
+class ProjectUpdateRequest(BaseModel):
+    """PATCH /projects/:id request body. All fields optional for partial update."""
+
+    name: str | None = Field(default=None, min_length=1, max_length=200)
+    description: str | None = None
+    github_repo: str | None = None
+    budget_monthly_usd: float | None = Field(default=None, ge=0.01, le=1000.0)
+    budget_daily_usd: float | None = Field(default=None, ge=0.01, le=100.0)
+
+
+class ProjectResponse(BaseModel):
+    """Single project in responses."""
+
+    id: str
+    name: str
+    description: str = ""
+    github_repo: str = ""
+    budget_monthly_usd: float
+    budget_daily_usd: float
+    created_at: str = ""
+    updated_at: str = ""
+
+
+class ProjectListResponse(BaseModel):
+    """GET /projects response."""
+
+    projects: list[ProjectResponse]
+    total: int

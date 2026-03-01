@@ -6,71 +6,15 @@ blocking RFC 1918 private addresses, loopback, and link-local ranges.
 
 from __future__ import annotations
 
-import ipaddress
-import socket
-from urllib.parse import urlparse
-
 import httpx
 import structlog
 
 from silkroute.mantis.skills.models import SkillCategory, SkillContext, SkillSpec
+from silkroute.network.ssrf import is_ssrf_blocked as _is_blocked_url
 
 log = structlog.get_logger()
 
 _MAX_RESPONSE_BYTES = 20 * 1024  # 20 KB
-
-# Blocked hostname patterns (literal matches)
-_BLOCKED_HOSTNAMES = frozenset(["localhost"])
-
-# Private/reserved IP network ranges (SSRF protection)
-_BLOCKED_NETWORKS = [
-    ipaddress.ip_network("10.0.0.0/8"),
-    ipaddress.ip_network("172.16.0.0/12"),
-    ipaddress.ip_network("192.168.0.0/16"),
-    ipaddress.ip_network("127.0.0.0/8"),
-    ipaddress.ip_network("169.254.0.0/16"),
-    ipaddress.ip_network("::1/128"),
-    ipaddress.ip_network("fc00::/7"),
-    ipaddress.ip_network("fe80::/10"),
-]
-
-
-def _is_blocked_url(url: str) -> str | None:
-    """Check if a URL should be blocked for SSRF reasons.
-
-    Returns an error message string if blocked, None if safe.
-    """
-    parsed = urlparse(url)
-
-    # Block non-http(s) schemes
-    if parsed.scheme.lower() not in ("http", "https"):
-        return f"Blocked: scheme '{parsed.scheme}' is not permitted (only http/https)"
-
-    hostname = parsed.hostname or ""
-
-    # Block localhost by name
-    if hostname.lower() in _BLOCKED_HOSTNAMES:
-        return f"Blocked: hostname '{hostname}' is reserved"
-
-    # Block by IP address range
-    try:
-        addr = ipaddress.ip_address(hostname)
-        for network in _BLOCKED_NETWORKS:
-            if addr in network:
-                return f"Blocked: IP {hostname} is in a private/reserved range"
-    except ValueError:
-        # Not a bare IP — resolve to check
-        try:
-            resolved_ip = socket.gethostbyname(hostname)
-            addr = ipaddress.ip_address(resolved_ip)
-            for network in _BLOCKED_NETWORKS:
-                if addr in network:
-                    return f"Blocked: '{hostname}' resolves to private/reserved IP {resolved_ip}"
-        except (OSError, ValueError):
-            # DNS failure or invalid hostname — allow through (fail-open on DNS errors)
-            pass
-
-    return None
 
 
 async def _http_request_handler(

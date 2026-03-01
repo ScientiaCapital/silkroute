@@ -18,7 +18,6 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
-import ipaddress
 import json
 import os
 import platform
@@ -32,6 +31,7 @@ from typing import Any
 import structlog
 
 from silkroute.agent.sandbox import SandboxConfig, validate_command
+from silkroute.network.ssrf import is_ssrf_blocked as _is_ssrf_blocked
 
 log = structlog.get_logger()
 
@@ -270,46 +270,6 @@ _GIT_ALLOWED_OPS: frozenset[str] = frozenset(
 
 # Skip directories that are never useful to grep
 _SKIP_DIRS: frozenset[str] = frozenset({".git", "__pycache__", "node_modules"})
-
-
-def _is_ssrf_blocked(url: str) -> str | None:
-    """Return a reason string if URL should be SSRF-blocked, else None.
-
-    Blocks:
-    - file:// scheme
-    - Loopback: 127.x.x.x, ::1, localhost (hostname)
-    - Link-local: 169.254.x.x, fe80::/10
-    - RFC 1918 private: 10.x, 172.16-31.x, 192.168.x
-    """
-    from urllib.parse import urlparse
-
-    parsed = urlparse(url)
-
-    # Block file:// scheme
-    if parsed.scheme.lower() == "file":
-        return "file:// scheme is not allowed"
-
-    hostname = parsed.hostname or ""
-
-    # Explicit localhost
-    if hostname.lower() in {"localhost", ""}:
-        return f"loopback hostname '{hostname}' is not allowed"
-
-    # Try to parse as IP
-    try:
-        addr = ipaddress.ip_address(hostname)
-    except ValueError:
-        # Not a plain IP — allow (DNS-based hosts pass through)
-        return None
-
-    if addr.is_loopback:
-        return f"loopback address {addr} is not allowed"
-    if addr.is_link_local:
-        return f"link-local address {addr} is not allowed"
-    if addr.is_private:
-        return f"private/RFC-1918 address {addr} is not allowed"
-
-    return None
 
 
 async def _http_request(
