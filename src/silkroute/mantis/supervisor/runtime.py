@@ -19,6 +19,8 @@ from typing import TYPE_CHECKING, Any
 
 import structlog
 
+from silkroute.mantis.context.manager import ContextManager
+from silkroute.mantis.context.models import ContextScope
 from silkroute.mantis.orchestrator.budget import BudgetExhaustedError, BudgetTracker
 from silkroute.mantis.runtime.interface import AgentResult, AgentRuntime, RuntimeConfig
 from silkroute.mantis.supervisor.models import (
@@ -84,6 +86,7 @@ class SupervisorRuntime:
         )
 
         session.status = SessionStatus.RUNNING
+        ctx_mgr = ContextManager.from_legacy_dict(plan.context)
 
         tracker = BudgetTracker(total_usd=plan.total_budget_usd)
 
@@ -98,7 +101,9 @@ class SupervisorRuntime:
             if step is None:
                 break
 
-            if step.condition and not self._evaluate_condition(step.condition, plan.context):
+            if step.condition and not self._evaluate_condition(
+                step.condition, ctx_mgr.to_legacy_dict()
+            ):
                 step.status = StepStatus.SKIPPED
                 yield json.dumps({
                     "type": "step_skipped",
@@ -114,7 +119,7 @@ class SupervisorRuntime:
             })
 
             try:
-                await self._execute_step(step, session, tracker)
+                await self._execute_step(step, session, tracker, ctx_mgr)
                 yield json.dumps({
                     "type": "step_completed",
                     "step_id": step.id,
@@ -213,6 +218,7 @@ class SupervisorRuntime:
         """Execute all pending steps in a session."""
         session.status = SessionStatus.RUNNING
         plan = session.plan
+        ctx_mgr = ContextManager.from_legacy_dict(plan.context)
 
         step_timeout = self._config.step_timeout_seconds if self._config else 300
         checkpoint_enabled = self._config.checkpoint_enabled if self._config else True
@@ -225,7 +231,9 @@ class SupervisorRuntime:
                 break
 
             # Evaluate condition
-            if step.condition and not self._evaluate_condition(step.condition, plan.context):
+            if step.condition and not self._evaluate_condition(
+                step.condition, ctx_mgr.to_legacy_dict()
+            ):
                 step.status = StepStatus.SKIPPED
                 log.info("supervisor_step_skipped", step_id=step.id, condition=step.condition)
                 continue
@@ -239,7 +247,7 @@ class SupervisorRuntime:
 
             try:
                 await asyncio.wait_for(
-                    self._execute_step(step, session, tracker),
+                    self._execute_step(step, session, tracker, ctx_mgr),
                     timeout=step_timeout,
                 )
             except TimeoutError:
@@ -290,6 +298,7 @@ class SupervisorRuntime:
         step: SupervisorStep,
         session: SupervisorSession,
         tracker: BudgetTracker,
+        ctx_mgr: ContextManager | None = None,
     ) -> AgentResult:
         """Execute a single step with retry logic and context passing."""
         step.status = StepStatus.RUNNING
@@ -341,24 +350,36 @@ class SupervisorRuntime:
         if result.success:
             step.status = StepStatus.COMPLETED
             await tracker.record_spend(result.cost_usd)
-            # Store output in plan context for downstream steps
-            session.plan.context[step.id] = {
+            step_data: dict[str, object] = {
                 "status": "completed",
                 "output": result.output,
                 "cost_usd": result.cost_usd,
             }
         elif step.skip_on_failure:
             step.status = StepStatus.SKIPPED
-            session.plan.context[step.id] = {
+            step_data = {
                 "status": "skipped",
                 "error": result.error,
             }
         else:
             step.status = StepStatus.FAILED
-            session.plan.context[step.id] = {
+            step_data = {
                 "status": "failed",
                 "error": result.error,
             }
+
+        # Store output in plan context for downstream steps
+        if ctx_mgr is not None:
+            await ctx_mgr.set(
+                key=step.id,
+                value=step_data,
+                scope=ContextScope.PLAN,
+                source=step.id,
+                token_estimate=len(str(step_data)),
+            )
+            session.plan.context = ctx_mgr.to_legacy_dict()
+        else:
+            session.plan.context[step.id] = step_data
 
         log.info(
             "supervisor_step_completed",

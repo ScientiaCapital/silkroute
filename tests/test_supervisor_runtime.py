@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
+from silkroute.mantis.context.manager import ContextManager
 from silkroute.mantis.runtime.interface import AgentResult, RuntimeConfig, RuntimeType
 from silkroute.mantis.supervisor.models import (
     SessionStatus,
@@ -394,6 +395,77 @@ class TestBuildPlanFromTask:
         plan = rt._build_plan_from_task("review code and then write tests", RuntimeConfig())
         assert len(plan.steps) == 2
         assert plan.steps[1].depends_on == [plan.steps[0].id]
+
+
+class TestContextManagerWiring:
+    """ContextManager integration with SupervisorRuntime."""
+
+    @pytest.mark.asyncio
+    async def test_context_manager_stores_step_output(self):
+        """After execution, plan.context should contain __silkroute_context_meta__."""
+        rt = SupervisorRuntime(child_factory=_mock_child_factory)
+        plan = SupervisorPlan(
+            steps=[SupervisorStep(id="a", name="step1", description="task1")],
+        )
+        session = SupervisorSession(plan=plan)
+        await rt._run_session(session, RuntimeConfig())
+
+        # ContextManager syncs meta key into plan.context
+        assert "__silkroute_context_meta__" in session.plan.context
+        assert "a" in session.plan.context
+        assert session.plan.context["a"]["status"] == "completed"
+
+    @pytest.mark.asyncio
+    async def test_legacy_context_backward_compatible(self):
+        """Old checkpoints with plain dict context (no meta key) still resume correctly."""
+        mock_pool = AsyncMock()
+
+        existing = SupervisorSession(
+            id="sess-legacy",
+            project_id="default",
+            status=SessionStatus.PAUSED,
+            plan=SupervisorPlan(
+                steps=[
+                    SupervisorStep(id="a", name="done", status=StepStatus.COMPLETED),
+                    SupervisorStep(
+                        id="b", name="pending", description="task2", depends_on=["a"],
+                    ),
+                ],
+            ),
+            checkpoint=SupervisorCheckpoint(
+                session_id="sess-legacy",
+                # Plain dict — no __silkroute_context_meta__ key
+                context_json={"a": {"status": "completed", "output": "done"}},
+            ),
+        )
+
+        mock_pool.fetchrow.return_value = _make_mock_row(existing)
+
+        rt = SupervisorRuntime(child_factory=_mock_child_factory, db_pool=mock_pool)
+        result = await rt.resume_session("sess-legacy")
+        assert result.status == "completed"
+        assert result.metadata["completed_steps"] == 2
+
+    @pytest.mark.asyncio
+    async def test_condition_evaluation_with_context_manager(self):
+        """Conditions work correctly through ContextManager-backed context."""
+        rt = SupervisorRuntime(child_factory=_mock_child_factory)
+        plan = SupervisorPlan(
+            steps=[
+                SupervisorStep(id="a", name="first", description="task1"),
+                SupervisorStep(
+                    id="b", name="conditional", description="task2",
+                    depends_on=["a"],
+                    condition="a.status == completed",
+                ),
+            ],
+        )
+        session = SupervisorSession(plan=plan)
+        result = await rt._run_session(session, RuntimeConfig())
+        assert result.status == "completed"
+        assert result.metadata["completed_steps"] == 2
+        # Verify meta key didn't break condition evaluation
+        assert "__silkroute_context_meta__" in session.plan.context
 
 
 # ──────────────────────────────────────────────────────────────
