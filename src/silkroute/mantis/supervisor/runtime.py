@@ -442,8 +442,12 @@ class SupervisorRuntime:
             await update_checkpoint(
                 self._db_pool, session.id, checkpoint, tracker.spent_usd
             )
-        except Exception:
-            log.debug("supervisor_checkpoint_failed", session_id=session.id)
+        except (OSError, RuntimeError, ValueError) as exc:
+            log.warning(
+                "supervisor_checkpoint_failed",
+                session_id=session.id,
+                error=str(exc),
+            )
 
     def _build_plan_from_task(
         self,

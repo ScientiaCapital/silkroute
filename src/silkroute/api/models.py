@@ -165,3 +165,56 @@ class SupervisorSessionResponse(BaseModel):
     created_at: str = ""
     updated_at: str = ""
     error: str = ""
+
+
+# --- Skills endpoints ---
+
+
+class SkillResponse(BaseModel):
+    """Single skill in the catalog."""
+
+    name: str
+    description: str
+    category: str
+    parameters: dict = Field(default_factory=dict)
+    is_llm_native: bool = False
+    model_hint: str = ""
+    max_budget_usd: float = 0.50
+    version: str = "0.1.0"
+    required_tools: list[str] = Field(default_factory=list)
+
+
+# --- Context7 endpoints ---
+
+
+class Context7ResolveRequest(BaseModel):
+    """POST /context7/resolve request body."""
+
+    library_name: str = Field(..., min_length=1, description="Library name to resolve")
+    query: str = Field(default="", description="Optional query to filter results")
+
+
+class Context7ResolveResponse(BaseModel):
+    """POST /context7/resolve response."""
+
+    found: bool
+    library_id: str = ""
+    library_name: str = ""
+    version: str = ""
+    trust_score: float = 0.0
+
+
+class Context7QueryRequest(BaseModel):
+    """POST /context7/query request body."""
+
+    library_name: str = Field(..., min_length=1)
+    query: str = Field(..., min_length=1)
+
+
+class Context7QueryResponse(BaseModel):
+    """POST /context7/query response."""
+
+    library_name: str
+    snippets: list[dict] = Field(default_factory=list)
+    truncated: bool = False
+    error: str = ""

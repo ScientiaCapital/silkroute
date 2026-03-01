@@ -79,7 +79,7 @@ class RalphController:
                     "status": session.status.value,
                     "cost_usd": session.total_cost_usd,
                 })
-            except Exception as exc:
+            except (RuntimeError, OSError, ValueError, TimeoutError) as exc:
                 await self._handle_failure(None, exc)
                 results.append({
                     "status": "failed",
@@ -109,8 +109,8 @@ class RalphController:
 
             daily_spend = await get_daily_spend(self._db_pool, "default")
             return daily_spend < self._budget_config.daily_max_usd
-        except Exception:
-            log.debug("ralph_budget_check_failed")
+        except (RuntimeError, OSError, ValueError) as exc:
+            log.debug("ralph_budget_check_failed", error=str(exc))
             return True  # Fail-open
 
     async def _discover_work(self) -> list[SupervisorPlan]:
@@ -177,5 +177,5 @@ class RalphController:
             session.error = str(error)
             try:
                 await update_supervisor_session(self._db_pool, session)
-            except Exception:
+            except (OSError, RuntimeError, ValueError):
                 log.debug("ralph_failure_persist_failed")

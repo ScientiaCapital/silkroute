@@ -233,7 +233,8 @@ class AlertMiddleware:
         # Budget alerts
         if self._total_budget > 0:
             pct = self._cumulative_cost / self._total_budget
-            if pct >= self._thresholds.budget_critical_pct and "budget_critical" not in self._alerts_fired:
+            is_critical = pct >= self._thresholds.budget_critical_pct
+            if is_critical and "budget_critical" not in self._alerts_fired:
                 self._alerts_fired.add("budget_critical")
                 log.warning(
                     "alert_budget_critical",
@@ -241,7 +242,7 @@ class AlertMiddleware:
                     total_usd=self._total_budget,
                     pct=round(pct * 100, 1),
                 )
-            elif pct >= self._thresholds.budget_warn_pct and "budget_warn" not in self._alerts_fired:
+            elif pct >= self._thresholds.budget_warn_pct and "budget_warn" not in self._alerts_fired:  # noqa: E501
                 self._alerts_fired.add("budget_warn")
                 log.warning(
                     "alert_budget_warning",

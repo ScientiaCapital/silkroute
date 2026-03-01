@@ -66,12 +66,12 @@ class TestToolRegistry:
         assert "read_file" in names
         assert "write_file" in names
         assert "list_directory" in names
-        assert len(names) == 4
+        assert len(names) == 8
 
     def test_to_openai_tools_format(self):
         registry = create_default_registry()
         tools = registry.to_openai_tools()
-        assert len(tools) == 4
+        assert len(tools) == 8
         for tool in tools:
             assert tool["type"] == "function"
             assert "name" in tool["function"]

@@ -23,6 +23,7 @@ from silkroute.mantis.orchestrator.decomposer import (
     SingleTaskDecomposer,
     TaskDecomposer,
 )
+from silkroute.mantis.orchestrator.llm_decomposer import LLMDecomposer
 from silkroute.mantis.orchestrator.models import (
     OrchestrationPlan,
     OrchestrationResult,
@@ -34,6 +35,7 @@ __all__ = [
     "BudgetExhaustedError",
     "BudgetTracker",
     "KeywordDecomposer",
+    "LLMDecomposer",
     "OrchestrationPlan",
     "OrchestrationResult",
     "SingleTaskDecomposer",

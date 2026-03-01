@@ -200,3 +200,24 @@ CREATE TABLE IF NOT EXISTS supervisor_sessions (
 
 CREATE INDEX IF NOT EXISTS idx_supervisor_sessions_project ON supervisor_sessions(project_id);
 CREATE INDEX IF NOT EXISTS idx_supervisor_sessions_status ON supervisor_sessions(status);
+
+-- ============================================================
+-- Skill Executions — analytics for skill usage
+-- ============================================================
+CREATE TABLE IF NOT EXISTS skill_executions (
+    id              BIGSERIAL PRIMARY KEY,
+    skill_name      TEXT NOT NULL,
+    session_id      TEXT REFERENCES agent_sessions(id),
+    project_id      TEXT NOT NULL REFERENCES projects(id),
+    success         BOOLEAN NOT NULL DEFAULT true,
+    cost_usd        NUMERIC(10, 6) NOT NULL DEFAULT 0.0,
+    duration_ms     INTEGER DEFAULT 0,
+    input_json      JSONB DEFAULT '{}'::jsonb,
+    output_text     TEXT DEFAULT '',
+    error_message   TEXT DEFAULT '',
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_skill_executions_skill ON skill_executions(skill_name);
+CREATE INDEX IF NOT EXISTS idx_skill_executions_project ON skill_executions(project_id);
+CREATE INDEX IF NOT EXISTS idx_skill_executions_created ON skill_executions(created_at);

@@ -200,6 +200,35 @@ class SupervisorConfig(BaseSettings):
     ralph_budget_usd: float = Field(default=5.0, description="Per-cycle Ralph budget")
 
 
+class SkillsConfig(BaseSettings):
+    """Skills framework configuration."""
+
+    model_config = SettingsConfigDict(env_prefix="SILKROUTE_SKILLS_")
+
+    enabled: bool = Field(default=True, description="Enable skills framework")
+    max_concurrent_skills: int = Field(default=3, description="Max concurrent skill executions")
+    default_budget_usd: float = Field(default=0.50, description="Default per-skill budget cap")
+    llm_model: str = Field(
+        default="deepseek/deepseek-r1-0528:free",
+        description="Default model for LLM-native skills",
+    )
+
+
+class Context7Config(BaseSettings):
+    """Context7 documentation API configuration."""
+
+    model_config = SettingsConfigDict(env_prefix="SILKROUTE_CONTEXT7_")
+
+    api_key: str = Field(
+        default="", description="Context7 API key (optional, for higher rate limits)"
+    )
+    base_url: str = Field(default="https://context7.com", description="Context7 API base URL")
+    timeout_seconds: int = Field(default=10, description="HTTP timeout for Context7 requests")
+    max_snippets: int = Field(default=20, description="Max documentation snippets to return")
+    max_context_tokens: int = Field(default=8000, description="Max tokens for context injection")
+    max_concurrent_requests: int = Field(default=3, description="Max concurrent Context7 requests")
+
+
 class ApiConfig(BaseSettings):
     """FastAPI REST layer configuration."""
 
@@ -253,6 +282,8 @@ class SilkRouteSettings(BaseSettings):
     mantis: MantisConfig = Field(default_factory=MantisConfig)
     api: ApiConfig = Field(default_factory=ApiConfig)
     supervisor: SupervisorConfig = Field(default_factory=SupervisorConfig)
+    skills: SkillsConfig = Field(default_factory=SkillsConfig)
+    context7: Context7Config = Field(default_factory=Context7Config)
 
     # Global
     hardware_profile: HardwareProfile = Field(

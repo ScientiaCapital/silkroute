@@ -505,6 +505,166 @@ def supervisor_ralph(once: bool) -> None:
         console.print("  Start daemon: silkroute daemon")
 
 
+@main.group()
+def skills() -> None:
+    """Manage skills and capabilities."""
+    pass
+
+
+@skills.command("list")
+@click.option("--category", "-c", default=None, help="Filter by category")
+def skills_list(category: str | None) -> None:
+    """List all available skills."""
+    from silkroute.mantis.skills import SkillCategory, SkillRegistry
+    from silkroute.mantis.skills.builtin import register_builtin_skills
+
+    registry = SkillRegistry()
+    register_builtin_skills(registry)
+
+    cat_filter: SkillCategory | None = None
+    if category is not None:
+        try:
+            cat_filter = SkillCategory(category)
+        except ValueError:
+            console.print(f"[red]Invalid category '{category}'.[/red]")
+            valid = ", ".join(c.value for c in SkillCategory)
+            console.print(f"  Valid values: {valid}")
+            raise SystemExit(1) from None
+
+    skill_list = registry.list_skills(category=cat_filter)
+
+    table = Table(title="SilkRoute Skills")
+    table.add_column("Name", style="cyan")
+    table.add_column("Category", style="magenta")
+    table.add_column("LLM", justify="center")
+    table.add_column("Budget", style="green", justify="right")
+    table.add_column("Description", style="dim", width=40)
+
+    for s in skill_list:
+        llm_icon = "✓" if s.is_llm_native else ""
+        table.add_row(
+            s.name,
+            s.category.value,
+            llm_icon,
+            f"${s.max_budget_usd:.2f}",
+            s.description[:40],
+        )
+
+    console.print(table)
+
+
+@skills.command("info")
+@click.argument("skill_name")
+def skills_info(skill_name: str) -> None:
+    """Show detailed info for a specific skill."""
+    from silkroute.mantis.skills import SkillRegistry
+    from silkroute.mantis.skills.builtin import register_builtin_skills
+
+    registry = SkillRegistry()
+    register_builtin_skills(registry)
+
+    skill = registry.get(skill_name)
+    if skill is None:
+        console.print(f"[red]Skill '{skill_name}' not found.[/red]")
+        raise SystemExit(1)
+
+    console.print(f"[bold]{skill.name}[/bold] v{skill.version}")
+    console.print(f"  Category: [magenta]{skill.category.value}[/magenta]")
+    console.print(f"  Description: {skill.description}")
+    console.print(f"  LLM Native: {'Yes' if skill.is_llm_native else 'No'}")
+    if skill.model_hint:
+        console.print(f"  Model: {skill.model_hint}")
+    console.print(f"  Budget: ${skill.max_budget_usd:.2f}/invocation")
+    if skill.required_tools:
+        console.print(f"  Required Tools: {', '.join(skill.required_tools)}")
+    if skill.parameters:
+        import json
+        console.print(f"  Parameters: {json.dumps(skill.parameters, indent=2)}")
+
+
+@main.group()
+def context7() -> None:
+    """Query Context7 for library documentation."""
+    pass
+
+
+@context7.command("resolve")
+@click.argument("library_name")
+@click.option("--query", "-q", default="", help="Optional search query")
+def context7_resolve(library_name: str, query: str) -> None:
+    """Resolve a library name to a Context7 library ID."""
+    import asyncio
+
+    from silkroute.config.settings import Context7Config
+    from silkroute.mantis.skills.context7 import Context7Client
+
+    cfg = Context7Config()
+    client = Context7Client(
+        base_url=cfg.base_url,
+        api_key=cfg.api_key,
+        timeout=cfg.timeout_seconds,
+    )
+
+    async def _resolve() -> object:
+        return await client.resolve_library(library_name, query)
+
+    try:
+        lib = asyncio.run(_resolve())
+        if lib is None:
+            console.print(f"[yellow]Library '{library_name}' not found on Context7.[/yellow]")
+            return
+        console.print(f"[green]Found:[/green] {lib.name}")
+        console.print(f"  ID: {lib.id}")
+        console.print(f"  Version: {lib.version}")
+        console.print(f"  Trust Score: {lib.trust_score:.2f}")
+    except Exception as e:
+        console.print(f"[red]Error: {e}[/red]")
+        raise SystemExit(1) from e
+
+
+@context7.command("query")
+@click.argument("library_name")
+@click.argument("query")
+def context7_query(library_name: str, query: str) -> None:
+    """Query Context7 for library documentation."""
+    import asyncio
+
+    from silkroute.config.settings import Context7Config
+    from silkroute.mantis.skills.context7 import Context7Client
+
+    cfg = Context7Config()
+    client = Context7Client(
+        base_url=cfg.base_url,
+        api_key=cfg.api_key,
+        timeout=cfg.timeout_seconds,
+        max_snippets=cfg.max_snippets,
+        max_context_tokens=cfg.max_context_tokens,
+    )
+
+    async def _query() -> object:
+        return await client.query(library_name, query)
+
+    try:
+        result = asyncio.run(_query())
+        if not result.snippets:
+            console.print(f"[yellow]No documentation found for '{library_name}': {query}[/yellow]")
+            return
+        console.print(f"[bold]Context7 Results for {library_name}[/bold]")
+        console.print(f"  Snippets: {len(result.snippets)}")
+        if result.truncated:
+            console.print("  [yellow](truncated)[/yellow]")
+        console.print()
+        for i, snippet in enumerate(result.snippets[:5], 1):
+            console.print(f"[cyan]--- {i}. {snippet.title} ---[/cyan]")
+            console.print(snippet.content[:500])
+            if snippet.url:
+                console.print(f"  [dim]{snippet.url}[/dim]")
+            console.print()
+    except Exception as e:
+        console.print(f"[red]Error: {e}[/red]")
+        raise SystemExit(1) from e
+
+
 def _default_config() -> str:
     """Generate default silkroute.toml configuration."""
     return """\

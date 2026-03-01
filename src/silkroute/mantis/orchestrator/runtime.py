@@ -57,8 +57,16 @@ class OrchestratorRuntime:
         child_factory: Callable[[str | None], AgentRuntime] | None = None,
         max_sub_tasks: int = 5,
         stage_timeout_seconds: int = 120,
+        use_llm_decomposer: bool = False,
     ) -> None:
-        self._decomposer: TaskDecomposer = decomposer or KeywordDecomposer()
+        if decomposer:
+            self._decomposer: TaskDecomposer = decomposer
+        elif use_llm_decomposer:
+            from silkroute.mantis.orchestrator.llm_decomposer import LLMDecomposer
+
+            self._decomposer = LLMDecomposer()
+        else:
+            self._decomposer = KeywordDecomposer()
         self._child_factory = child_factory or _default_child_factory
         self._max_sub_tasks = max_sub_tasks
         self._stage_timeout = stage_timeout_seconds
@@ -187,7 +195,7 @@ class OrchestratorRuntime:
                         "output": result.output[:500],
                     }
                 except (
-                    asyncio.TimeoutError,
+                    TimeoutError,
                     BudgetExhaustedError,
                     RuntimeError,
                     OSError,
