@@ -3,39 +3,44 @@
 **Branch**: main | **Updated**: 2026-02-28
 
 ## Status
-Phase 3 (Multi-Agent Orchestration) complete on `main`. OrchestratorRuntime with DAG-based stage execution, middleware chain, keyword decomposer, true per-iteration streaming, SSE timeout, tool audit persistence, and backlog cleanup. 410/410 tests passing. Lint clean. 0 observer BLOCKERs/CRITICALs.
+Phase 4 (Supervisor + Ralph Mode) complete on `main`. SupervisorRuntime with sequential step execution, retry/checkpoint/context-passing, RalphController autonomous loop, 3 new middleware, 4 backlog fixes, API endpoints, CLI commands. 493/493 tests passing. Lint clean. 0 observer BLOCKERs/CRITICALs.
 
-## Done (This Session — Phase 3)
-- [x] Created `mantis/orchestrator/` package: models, decomposer, budget, middleware, aggregator, runtime (7 modules)
-- [x] OrchestratorRuntime implementing AgentRuntime Protocol with DAG stage execution
-- [x] KeywordDecomposer + SingleTaskDecomposer (no LLM, keyword-based splitting)
-- [x] Middleware chain: ValidationMiddleware → BudgetMiddleware → LoggingMiddleware
-- [x] BudgetTracker with asyncio.Lock for concurrent sub-agent spend tracking
-- [x] True per-iteration streaming via asyncio.Queue in run_agent() + LegacyRuntime.stream()
-- [x] SSE server-side timeout (stream_timeout_seconds: 300 in ApiConfig)
-- [x] Tool audit log persistence (db/repositories/tool_audit.py wired into _schedule_db_writes)
-- [x] Narrowed broad except in app.py to (OSError, asyncpg.PostgresError, asyncpg.InterfaceError, ValueError)
-- [x] Shared test_settings fixture, removed duplicates from 3 test files
-- [x] API: `orchestrate: bool` field on RuntimeInvokeRequest, routes to OrchestratorRuntime
-- [x] 64 new tests (410 total), ruff clean, gitleaks clean
+## Done (This Session --- Phase 4)
+- [x] Created `mantis/supervisor/` package: models, runtime, ralph, __init__ (4 modules)
+- [x] SupervisorRuntime implementing AgentRuntime Protocol with sequential step execution
+- [x] Inter-step context passing via plan.context[step_id], JSONB serializable
+- [x] Retry with exponential backoff, configurable per-step max_retries
+- [x] Safe structured condition evaluation (key existence, status comparison, contains)
+- [x] Checkpoint persistence to supervisor_sessions table
+- [x] RalphController autonomous loop via DaemonScheduler cron
+- [x] 3 new middleware: RetryMiddleware, CheckpointMiddleware, AlertMiddleware
+- [x] Backlog W1: narrowed except in orchestrator stream
+- [x] Backlog W2: atomic budget via try_reserve()/settle()
+- [x] Backlog W3: immutable allocate_budget() with copy.deepcopy
+- [x] Backlog R2: parallel sub-task execution via asyncio.gather
+- [x] API: POST/GET/DELETE /supervisor/sessions, POST .../resume
+- [x] CLI: silkroute supervisor create|status|resume|cancel|ralph
+- [x] SupervisorConfig (SILKROUTE_SUPERVISOR_ env prefix)
+- [x] supervisor_sessions DB table + indexes
+- [x] 83 new tests (493 total), ruff clean, gitleaks clean
 
 ## Blockers
 None
 
 ## Tomorrow
-Tomorrow: Phase 4 (Supervisor + Ralph Mode) via planning-prompts | Sonnet builder + Haiku observer | Est: 1-2 sessions, ~$5 | Observer notes: W1 broad except in orchestrator stream, W2 non-atomic budget read, R2 sequential streaming in orchestrator
+Tomorrow: Phase 5 (Skills + Context7 + tools) via planning-prompts | Sonnet builder + Haiku observer | Est: 1-2 sessions, ~$5 | Observer notes: W1 broad except in ralph, W2 silent checkpoint loss, W4 naive keyword decomposer
 
 ## Tech Stack
 Python 3.12 (Click + Pydantic + FastAPI + uvicorn + litellm + asyncpg + structlog + Rich + redis + apscheduler + deepagents + langchain-openai) | Next.js 15 (React 19, Tailwind v4) | PostgreSQL 16 | Redis 7 | LiteLLM | Docker Compose
 
 ## Session Stats
-- New files: 13 (8 source + 5 test)
-- Modified files: 22 (9 source + 13 test)
-- Tests: 346 existing + 64 new = 410 total, all passing
+- New files: 16 (6 source + 7 test + 3 meta)
+- Modified files: 16 (12 source + 1 test + 3 meta)
+- Tests: 410 existing + 83 new = 493 total, all passing
 - Lint: clean (ruff check)
 - Security: gitleaks clean, 0 secrets
-- Lines: +1,576 / -107 (915 backend new, 139 backend modified, 1,097 test new)
-- Observer: 0 BLOCKER, 0 CRITICAL, 4 WARNING, 2 RISK (all logged to Backlog)
+- Lines: +3,406 new, +701/-72 modified
+- Observer: 0 BLOCKER, 0 CRITICAL, 2 WARNING (logged to Backlog)
 
 ## Links
 - GitHub: https://github.com/ScientiaCapital/silkroute
@@ -45,4 +50,4 @@ Python 3.12 (Click + Pydantic + FastAPI + uvicorn + litellm + asyncpg + structlo
 
 ---
 
-_Updated by Phase 3 completion. 2026-02-28._
+_Updated by Phase 4 completion. 2026-02-28._
