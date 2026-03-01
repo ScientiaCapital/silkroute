@@ -665,6 +665,187 @@ def context7_query(library_name: str, query: str) -> None:
         raise SystemExit(1) from e
 
 
+# --- Projects ---
+
+
+@main.group()
+def projects() -> None:
+    """Manage SilkRoute projects."""
+    pass
+
+
+@projects.command("list")
+def projects_list() -> None:
+    """List all projects."""
+    import asyncio
+
+    import asyncpg
+    from rich.table import Table as RichTable
+
+    from silkroute.config.settings import load_settings
+
+    settings = load_settings()
+
+    async def _list() -> list[dict]:
+        pool = await asyncpg.create_pool(settings.database.postgres_url, min_size=1, max_size=2)
+        try:
+            from silkroute.db.repositories.projects import list_projects
+            rows = await list_projects(pool)
+            return rows
+        finally:
+            await pool.close()
+
+    try:
+        rows = asyncio.run(_list())
+    except Exception as e:
+        console.print(f"[red]Error: {e}[/red]")
+        raise SystemExit(1) from e
+
+    if not rows:
+        console.print("[yellow]No projects found.[/yellow]")
+        return
+
+    table = RichTable(title="Projects")
+    table.add_column("ID", style="cyan")
+    table.add_column("Name", style="bold")
+    table.add_column("Monthly Budget", justify="right")
+    table.add_column("Daily Budget", justify="right")
+    table.add_column("GitHub Repo")
+    for r in rows:
+        table.add_row(
+            r["id"],
+            r["name"],
+            f"${float(r['budget_monthly_usd']):.2f}",
+            f"${float(r['budget_daily_usd']):.2f}",
+            r.get("github_repo", ""),
+        )
+    console.print(table)
+
+
+@projects.command("create")
+@click.argument("project_id")
+@click.option("--name", required=True, help="Project display name")
+@click.option("--description", default="", help="Project description")
+@click.option("--github-repo", default="", help="GitHub repository (org/repo)")
+@click.option("--budget-monthly", type=float, default=2.85, help="Monthly budget in USD")
+@click.option("--budget-daily", type=float, default=0.10, help="Daily budget in USD")
+def projects_create(
+    project_id: str,
+    name: str,
+    description: str,
+    github_repo: str,
+    budget_monthly: float,
+    budget_daily: float,
+) -> None:
+    """Create a new project."""
+    import asyncio
+
+    import asyncpg
+
+    from silkroute.config.settings import load_settings
+
+    settings = load_settings()
+
+    async def _create() -> dict:
+        pool = await asyncpg.create_pool(settings.database.postgres_url, min_size=1, max_size=2)
+        try:
+            from silkroute.db.repositories.projects import create_project
+            return await create_project(
+                pool, project_id, name,
+                description=description,
+                github_repo=github_repo,
+                budget_monthly_usd=budget_monthly,
+                budget_daily_usd=budget_daily,
+            )
+        finally:
+            await pool.close()
+
+    try:
+        row = asyncio.run(_create())
+        console.print(f"[green]Created project '{row['id']}' ({row['name']})[/green]")
+        console.print(f"  Monthly budget: ${float(row['budget_monthly_usd']):.2f}")
+        console.print(f"  Daily budget:   ${float(row['budget_daily_usd']):.2f}")
+    except Exception as e:
+        console.print(f"[red]Error: {e}[/red]")
+        raise SystemExit(1) from e
+
+
+@projects.command("show")
+@click.argument("project_id")
+def projects_show(project_id: str) -> None:
+    """Show details of a single project."""
+    import asyncio
+
+    import asyncpg
+
+    from silkroute.config.settings import load_settings
+
+    settings = load_settings()
+
+    async def _show() -> dict | None:
+        pool = await asyncpg.create_pool(settings.database.postgres_url, min_size=1, max_size=2)
+        try:
+            from silkroute.db.repositories.projects import get_project
+            return await get_project(pool, project_id)
+        finally:
+            await pool.close()
+
+    try:
+        row = asyncio.run(_show())
+    except Exception as e:
+        console.print(f"[red]Error: {e}[/red]")
+        raise SystemExit(1) from e
+
+    if row is None:
+        console.print(f"[yellow]Project '{project_id}' not found.[/yellow]")
+        raise SystemExit(1)
+
+    console.print(f"[bold]{row['name']}[/bold] ({row['id']})")
+    if row.get("description"):
+        console.print(f"  Description: {row['description']}")
+    if row.get("github_repo"):
+        console.print(f"  GitHub:      {row['github_repo']}")
+    console.print(f"  Monthly:     ${float(row['budget_monthly_usd']):.2f}")
+    console.print(f"  Daily:       ${float(row['budget_daily_usd']):.2f}")
+    console.print(f"  Created:     {row.get('created_at', '—')}")
+    console.print(f"  Updated:     {row.get('updated_at', '—')}")
+
+
+@projects.command("delete")
+@click.argument("project_id")
+@click.confirmation_option(prompt="Are you sure you want to delete this project?")
+def projects_delete(project_id: str) -> None:
+    """Delete a project (cannot delete 'default')."""
+    import asyncio
+
+    import asyncpg
+
+    from silkroute.config.settings import load_settings
+
+    settings = load_settings()
+
+    async def _delete() -> bool:
+        pool = await asyncpg.create_pool(settings.database.postgres_url, min_size=1, max_size=2)
+        try:
+            from silkroute.db.repositories.projects import delete_project
+            return await delete_project(pool, project_id)
+        finally:
+            await pool.close()
+
+    try:
+        deleted = asyncio.run(_delete())
+        if deleted:
+            console.print(f"[green]Deleted project '{project_id}'.[/green]")
+        else:
+            console.print(f"[yellow]Project '{project_id}' not found.[/yellow]")
+    except ValueError as e:
+        console.print(f"[red]Error: {e}[/red]")
+        raise SystemExit(1) from e
+    except Exception as e:
+        console.print(f"[red]Error: {e}[/red]")
+        raise SystemExit(1) from e
+
+
 def _default_config() -> str:
     """Generate default silkroute.toml configuration."""
     return """\
