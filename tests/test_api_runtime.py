@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import AsyncGenerator
 from unittest.mock import AsyncMock, patch
 
 import fakeredis.aioredis
@@ -112,6 +113,64 @@ class TestRuntimeStream:
     def test_stream_missing_task(self, app: TestClient) -> None:
         resp = app.get("/runtime/stream", headers=AUTH)
         assert resp.status_code == 422
+
+    def test_stream_timeout_error(self, app: TestClient) -> None:
+        async def mock_stream_timeout(
+            task: str, config: str | None = None
+        ) -> AsyncGenerator[str, None]:
+            yield "partial"
+            raise TimeoutError("timed out")
+
+        mock_runtime = AsyncMock()
+        mock_runtime.stream = mock_stream_timeout
+
+        with patch(
+            "silkroute.api.routes.runtime.get_runtime",
+            return_value=mock_runtime,
+        ):
+            resp = app.get("/runtime/stream?task=hello", headers=AUTH)
+
+        assert "data: [ERROR] Stream timed out" in resp.text
+        assert "data: [DONE]" not in resp.text
+
+    def test_stream_generic_exception(self, app: TestClient) -> None:
+        async def mock_stream_error(
+            task: str, config: str | None = None
+        ) -> AsyncGenerator[str, None]:
+            if True:
+                raise ValueError("boom")
+            yield  # unreachable but makes it an async generator
+
+        mock_runtime = AsyncMock()
+        mock_runtime.stream = mock_stream_error
+
+        with patch(
+            "silkroute.api.routes.runtime.get_runtime",
+            return_value=mock_runtime,
+        ):
+            resp = app.get("/runtime/stream?task=hello", headers=AUTH)
+
+        assert "data: [ERROR] boom" in resp.text
+        assert "data: [DONE]" not in resp.text
+
+    def test_stream_no_done_on_error(self, app: TestClient) -> None:
+        async def mock_stream_raises(
+            task: str, config: str | None = None
+        ) -> AsyncGenerator[str, None]:
+            yield "first"
+            raise RuntimeError("unexpected failure")
+
+        mock_runtime = AsyncMock()
+        mock_runtime.stream = mock_stream_raises
+
+        with patch(
+            "silkroute.api.routes.runtime.get_runtime",
+            return_value=mock_runtime,
+        ):
+            resp = app.get("/runtime/stream?task=hello", headers=AUTH)
+
+        assert "[ERROR]" in resp.text
+        assert "data: [DONE]" not in resp.text
 
 
 # --- Model catalog ---
