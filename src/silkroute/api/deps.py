@@ -18,6 +18,8 @@ from silkroute.daemon.queue import TaskQueue
 if TYPE_CHECKING:
     import asyncpg
 
+    from silkroute.mantis.skills import SkillRegistry
+
 
 def get_settings(request: Request) -> SilkRouteSettings:
     """Retrieve settings from app state."""
@@ -60,3 +62,8 @@ def get_queue(request: Request) -> TaskQueue:
 def get_db_pool(request: Request) -> asyncpg.Pool | None:
     """Retrieve the DB connection pool (may be None if Postgres unavailable)."""
     return getattr(request.app.state, "db_pool", None)
+
+
+def get_skill_registry(request: Request) -> SkillRegistry:
+    """Retrieve the shared SkillRegistry singleton from app state."""
+    return request.app.state.skill_registry

@@ -2,26 +2,21 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 
+from silkroute.api.deps import get_skill_registry
 from silkroute.api.models import SkillResponse
 from silkroute.mantis.skills import SkillCategory, SkillRegistry
-from silkroute.mantis.skills.builtin import register_builtin_skills
 
 router = APIRouter(prefix="/skills", tags=["skills"])
 
 
-def _get_registry() -> SkillRegistry:
-    """Get a populated skill registry."""
-    registry = SkillRegistry()
-    register_builtin_skills(registry)
-    return registry
-
-
 @router.get("", response_model=list[SkillResponse])
-async def list_skills(category: str | None = None) -> list[SkillResponse]:
+async def list_skills(
+    category: str | None = None,
+    registry: SkillRegistry = Depends(get_skill_registry),
+) -> list[SkillResponse]:
     """List all available skills, optionally filtered by category."""
-    registry = _get_registry()
 
     cat_filter: SkillCategory | None = None
     if category is not None:
@@ -52,9 +47,11 @@ async def list_skills(category: str | None = None) -> list[SkillResponse]:
 
 
 @router.get("/{skill_id}", response_model=SkillResponse)
-async def get_skill(skill_id: str) -> SkillResponse:
+async def get_skill(
+    skill_id: str,
+    registry: SkillRegistry = Depends(get_skill_registry),
+) -> SkillResponse:
     """Get details for a specific skill."""
-    registry = _get_registry()
     skill = registry.get(skill_id)
     if skill is None:
         raise HTTPException(status_code=404, detail=f"Skill '{skill_id}' not found")

@@ -59,6 +59,15 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         log.warning("api_db_failed", error=str(exc))
         app.state.db_pool = None
 
+    # Initialize SkillRegistry singleton (stateless, no cleanup needed)
+    from silkroute.mantis.skills import SkillRegistry
+    from silkroute.mantis.skills.builtin import register_builtin_skills
+
+    registry = SkillRegistry()
+    register_builtin_skills(registry)
+    app.state.skill_registry = registry
+    log.info("skill_registry_initialized", skill_count=len(registry.list_skills()))
+
     yield
 
     # Cleanup
