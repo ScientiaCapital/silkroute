@@ -15,12 +15,14 @@ def _make_daemon_config(
     nightly_scan_enabled: bool = True,
     nightly_scan_cron: str = "0 3 * * *",
     dependency_check_cron: str = "0 6 * * 1",
+    budget_rollup_cron: str = "5 0 * * *",
 ) -> MagicMock:
     """Create a mock DaemonConfig for testing."""
     config = MagicMock()
     config.nightly_scan_enabled = nightly_scan_enabled
     config.nightly_scan_cron = nightly_scan_cron
     config.dependency_check_cron = dependency_check_cron
+    config.budget_rollup_cron = budget_rollup_cron
     return config
 
 
@@ -67,14 +69,15 @@ class TestDaemonScheduler:
 
         scheduler.start()
 
-        # Should have 2 add_job calls: nightly_scan + dependency_check
-        assert mock_scheduler_instance.add_job.call_count == 2
+        # Should have 3 add_job calls: nightly_scan + dependency_check + budget_rollup
+        assert mock_scheduler_instance.add_job.call_count == 3
         job_ids = [
             call.kwargs.get("id") or call[1].get("id", "")
             for call in mock_scheduler_instance.add_job.call_args_list
         ]
         assert "nightly_scan" in job_ids
         assert "dependency_check" in job_ids
+        assert "budget_rollup" in job_ids
 
     @patch("silkroute.daemon.scheduler.AsyncIOScheduler")
     @patch("silkroute.daemon.scheduler.RedisJobStore")
@@ -91,10 +94,15 @@ class TestDaemonScheduler:
 
         scheduler.start()
 
-        # Only dependency_check should be registered
-        assert mock_scheduler_instance.add_job.call_count == 1
-        call_kwargs = mock_scheduler_instance.add_job.call_args_list[0].kwargs
-        assert call_kwargs["id"] == "dependency_check"
+        # dependency_check + budget_rollup should be registered (no nightly_scan)
+        assert mock_scheduler_instance.add_job.call_count == 2
+        job_ids = [
+            c.kwargs.get("id") or c[1].get("id", "")
+            for c in mock_scheduler_instance.add_job.call_args_list
+        ]
+        assert "dependency_check" in job_ids
+        assert "budget_rollup" in job_ids
+        assert "nightly_scan" not in job_ids
 
     @pytest.mark.asyncio
     async def test_stop_shuts_down_scheduler(self) -> None:
@@ -173,3 +181,78 @@ class TestDaemonScheduler:
         assert submitted.tier_override == "standard"
         assert submitted.budget_limit_usd == 2.0
         assert submitted.max_iterations == 15
+
+    @patch("silkroute.daemon.scheduler.AsyncIOScheduler")
+    @patch("silkroute.daemon.scheduler.RedisJobStore")
+    def test_start_registers_budget_rollup_job(
+        self, mock_jobstore_cls: MagicMock, mock_scheduler_cls: MagicMock
+    ) -> None:
+        config = _make_daemon_config()
+        queue = MagicMock(spec=TaskQueue)
+        scheduler = DaemonScheduler(config, queue)
+
+        mock_scheduler_instance = MagicMock()
+        mock_scheduler_instance.get_jobs.return_value = []
+        mock_scheduler_cls.return_value = mock_scheduler_instance
+
+        scheduler.start()
+
+        job_ids = [
+            c.kwargs.get("id") or c[1].get("id", "")
+            for c in mock_scheduler_instance.add_job.call_args_list
+        ]
+        assert "budget_rollup" in job_ids
+
+    @pytest.mark.asyncio
+    async def test_budget_rollup_calls_rollup_day_with_yesterday(self) -> None:
+        """_budget_rollup calls rollup_day with the db_pool and yesterday's date."""
+        import datetime
+
+        config = _make_daemon_config()
+        queue = MagicMock(spec=TaskQueue)
+        mock_db_pool = AsyncMock()
+        scheduler = DaemonScheduler(config, queue, db_pool=mock_db_pool)
+
+        calls_received: list = []
+
+        async def fake_rollup(pool, date):  # noqa: ANN001
+            calls_received.append((pool, date))
+
+        import silkroute.db.repositories.budget_snapshots as snap_mod
+
+        original = snap_mod.rollup_day
+        snap_mod.rollup_day = fake_rollup
+        try:
+            await scheduler._budget_rollup()
+        finally:
+            snap_mod.rollup_day = original
+
+        assert len(calls_received) == 1
+        assert calls_received[0][0] is mock_db_pool
+        yesterday = datetime.date.today() - datetime.timedelta(days=1)
+        assert calls_received[0][1] == yesterday
+
+    @pytest.mark.asyncio
+    async def test_budget_rollup_uses_db_pool(self) -> None:
+        """_budget_rollup passes self._db_pool to rollup_day."""
+        config = _make_daemon_config()
+        queue = MagicMock(spec=TaskQueue)
+        mock_db_pool = AsyncMock()
+        scheduler = DaemonScheduler(config, queue, db_pool=mock_db_pool)
+
+        calls_received: list = []
+
+        async def fake_rollup(pool, date):  # noqa: ANN001
+            calls_received.append((pool, date))
+
+        import silkroute.db.repositories.budget_snapshots as snap_mod
+
+        original = snap_mod.rollup_day
+        snap_mod.rollup_day = fake_rollup
+        try:
+            await scheduler._budget_rollup()
+        finally:
+            snap_mod.rollup_day = original
+
+        assert len(calls_received) == 1
+        assert calls_received[0][0] is mock_db_pool

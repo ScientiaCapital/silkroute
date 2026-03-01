@@ -105,6 +105,20 @@ class DaemonScheduler:
                 cron=self._supervisor_config.ralph_cron,
             )
 
+        # Register daily budget rollup job
+        self._scheduler.add_job(
+            self._budget_rollup,
+            trigger=CronTrigger.from_crontab(self._config.budget_rollup_cron),
+            id="budget_rollup",
+            name="Daily budget snapshot rollup",
+            replace_existing=True,
+        )
+        log.info(
+            "scheduler_job_registered",
+            job_id="budget_rollup",
+            cron=self._config.budget_rollup_cron,
+        )
+
         self._scheduler.start()
         log.info("scheduler_started", job_count=len(self._scheduler.get_jobs()))
 
@@ -151,6 +165,17 @@ class DaemonScheduler:
             max_iterations=15,
         )
         await self._queue.submit(request)
+
+    async def _budget_rollup(self) -> None:
+        """Roll up yesterday's cost_logs into budget_snapshots."""
+        import datetime
+
+        from silkroute.db.repositories.budget_snapshots import rollup_day
+
+        yesterday = datetime.date.today() - datetime.timedelta(days=1)
+        log.info("scheduler_budget_rollup_triggered", date=str(yesterday))
+        await rollup_day(self._db_pool, yesterday)
+        log.info("scheduler_budget_rollup_done", date=str(yesterday))
 
     async def _ralph_cycle(self) -> None:
         """Run one Ralph Mode autonomous cycle."""

@@ -1,6 +1,7 @@
 """Budget endpoints — global and per-project budget status.
 
 GET /budget              → Global daily/monthly budget status
+GET /budget/snapshots    → Daily budget snapshot history for a project
 GET /budget/{project_id} → Per-project spend and limits
 
 Fails open if Postgres is unavailable (returns zeros rather than 503).
@@ -8,13 +9,19 @@ Fails open if Postgres is unavailable (returns zeros rather than 503).
 
 from __future__ import annotations
 
+import datetime
 from typing import TYPE_CHECKING
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 
 from silkroute.api.auth import require_auth
 from silkroute.api.deps import get_budget_config, get_db_pool
-from silkroute.api.models import GlobalBudgetResponse, ProjectBudgetResponse
+from silkroute.api.models import (
+    BudgetSnapshotItem,
+    BudgetSnapshotListResponse,
+    GlobalBudgetResponse,
+    ProjectBudgetResponse,
+)
 from silkroute.config.settings import BudgetConfig
 
 if TYPE_CHECKING:
@@ -68,6 +75,52 @@ async def global_budget(
         allowed=check.allowed,
         warning=check.warning,
     )
+
+
+@router.get("/snapshots")
+async def budget_snapshots(
+    project_id: str = Query(..., description="Project ID to fetch snapshots for"),
+    start_date: datetime.date = Query(
+        default=datetime.date.today() - datetime.timedelta(days=30),
+        description="Inclusive start date (YYYY-MM-DD)",
+    ),
+    end_date: datetime.date = Query(
+        default=datetime.date.today(),
+        description="Inclusive end date (YYYY-MM-DD)",
+    ),
+    db_pool: asyncpg.Pool | None = Depends(get_db_pool),
+) -> BudgetSnapshotListResponse:
+    """Get daily budget snapshot history for a project.
+
+    Fails open if Postgres is unavailable — returns an empty list.
+    """
+    if db_pool is None:
+        return BudgetSnapshotListResponse(snapshots=[], count=0)
+
+    try:
+        from silkroute.db.repositories.budget_snapshots import get_snapshots
+
+        rows = await get_snapshots(db_pool, project_id, start_date, end_date)
+    except Exception:
+        return BudgetSnapshotListResponse(snapshots=[], count=0)
+
+    items = [
+        BudgetSnapshotItem(
+            project_id=str(row["project_id"]),
+            snapshot_date=str(row["snapshot_date"]),
+            total_cost_usd=float(row["total_cost_usd"]),
+            total_requests=int(row["total_requests"]),
+            total_tokens=int(row["total_tokens"]),
+            free_requests=int(row["free_requests"]),
+            free_cost_usd=float(row["free_cost_usd"]),
+            standard_requests=int(row["standard_requests"]),
+            standard_cost_usd=float(row["standard_cost_usd"]),
+            premium_requests=int(row["premium_requests"]),
+            premium_cost_usd=float(row["premium_cost_usd"]),
+        )
+        for row in rows
+    ]
+    return BudgetSnapshotListResponse(snapshots=items, count=len(items))
 
 
 @router.get("/{project_id}")

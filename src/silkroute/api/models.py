@@ -98,6 +98,29 @@ class ModelResponse(BaseModel):
 # --- Budget ---
 
 
+class BudgetSnapshotItem(BaseModel):
+    """A single daily budget snapshot for a project."""
+
+    project_id: str
+    snapshot_date: str
+    total_cost_usd: float
+    total_requests: int
+    total_tokens: int
+    free_requests: int
+    free_cost_usd: float
+    standard_requests: int
+    standard_cost_usd: float
+    premium_requests: int
+    premium_cost_usd: float
+
+
+class BudgetSnapshotListResponse(BaseModel):
+    """GET /budget/snapshots response."""
+
+    snapshots: list[BudgetSnapshotItem]
+    count: int
+
+
 class GlobalBudgetResponse(BaseModel):
     """GET /budget response."""
 

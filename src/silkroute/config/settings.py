@@ -148,6 +148,10 @@ class DaemonConfig(BaseSettings):
         default="0 6 * * 1",
         description="Weekly dependency audit (Monday 6 AM)",
     )
+    budget_rollup_cron: str = Field(
+        default="5 0 * * *",
+        description="Daily budget snapshot rollup (12:05 AM)",
+    )
 
 
 class MantisConfig(BaseSettings):
