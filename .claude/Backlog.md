@@ -1,23 +1,15 @@
 # SilkRoute Backlog
 
-**Updated:** 2026-03-01 (Phase 7 complete)
-
-## Priority: High (resolve in Phase 8)
-
-| # | Item | Source | Effort | Impact | Owner | ETA |
-|---|------|--------|--------|--------|-------|-----|
-| 8 | Add test for lifespan Redis/DB connect+disconnect | Observer WARNING (Phase 2) | S | Medium | --- | Phase 8 |
-| 10 | CLI commands (skills list/info, context7 resolve/query, projects) not unit-tested | Observer INFO (Phase 5+6) | S | Medium | --- | Phase 8 |
+**Updated:** 2026-03-01 (Phase 8 complete)
 
 ## Priority: Medium
 
 | # | Item | Source | Effort | Impact | Owner | ETA |
 |---|------|--------|--------|--------|-------|-----|
 | 6 | Process rlimit enforcement (memory cap) | Observer WARNING (Phase 0) | M | Low | --- | Docker phase |
-| 9 | Add test for SSE stream error path (`[ERROR]` event) | Observer WARNING (Phase 2) | XS | Low | --- | Phase 8 |
-| 17 | Dashboard ESLint configuration (`next lint` requires setup) | Observer INFO (Phase 6) | XS | Low | --- | Phase 8 |
-| 19 | SupervisorSessionResponse construction repeated in 3 routes — extract helper | Observer INFO (Phase 6b) | XS | Low | --- | Phase 8 |
-| 20 | Supervisor route ordering risk: future routes must maintain GET /sessions before GET /sessions/{id} | Observer INFO (Phase 6b) | XS | Low | --- | Phase 8 |
+| 17 | Dashboard ESLint configuration (`next lint` requires setup) | Observer INFO (Phase 6) | XS | Low | --- | Future |
+| 19 | SupervisorSessionResponse construction repeated in 3 routes — extract helper | Observer INFO (Phase 6b) | XS | Low | --- | Future |
+| 20 | Supervisor route ordering risk: future routes must maintain GET /sessions before GET /sessions/{id} | Observer INFO (Phase 6b) | XS | Low | --- | Future |
 | 21 | `_extract_cost()` still has silent `except Exception: pass` (canonical pattern) | Observer INFO (Phase 7) | XS | Low | --- | Future |
 | 22 | Pre-existing test failures: 6 deepagents + 1 langchain_openai collection error | Observer INFO (Phase 7) | S | Low | --- | Future |
 
@@ -32,7 +24,15 @@
 | 15 | API rate limiting tiers | Plan scope exclusion (Phase 2) | M | Medium | --- | Future |
 | 16 | Ralph autonomy boundary — no human approval gate | Observer R1 (Phase 4) | M | Low | --- | Future |
 
-## Resolved (This Session — Phase 7)
+## Resolved (This Session — Phase 8)
+
+| Item | Resolution |
+|------|-----------|
+| Lifespan context manager untested (#8) | RESOLVED — 8 tests in test_lifespan.py covering Redis/Postgres connect+fail+cleanup |
+| SSE stream error paths untested (#9) | RESOLVED — 3 tests for TimeoutError, generic Exception, no [DONE] on error |
+| CLI commands 0% coverage (#10) | RESOLVED — 31 tests in test_cli.py covering skills, context7, projects, and simple commands |
+
+## Resolved (Phase 7)
 
 | Item | Resolution |
 |------|-----------|
