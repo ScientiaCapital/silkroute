@@ -34,6 +34,9 @@ class SkillContext:
     workspace_dir: str = "."
     budget_remaining_usd: float = 1.0
     _llm_factory: Callable | None = None
+    db_pool: Any = None  # asyncpg.Pool (avoid import)
+    session_id: str = ""
+    project_id: str = "default"
 
     def get_llm(self, model_id: str | None = None) -> object:
         """Get LLM client. Raises RuntimeError if no factory configured."""

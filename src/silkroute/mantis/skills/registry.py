@@ -49,8 +49,11 @@ class SkillRegistry:
         """Execute a named skill, injecting ctx as _skill_ctx kwarg.
 
         Returns a SkillResult. On error (missing skill or handler exception),
-        returns a failure result rather than raising.
+        returns a failure result rather than raising. Persists execution record
+        fire-and-forget if ctx.db_pool is available.
         """
+        import time
+
         skill = self._skills.get(name)
         if skill is None:
             available = ", ".join(self._skills)
@@ -60,12 +63,36 @@ class SkillRegistry:
                 error=f"Unknown skill '{name}'. Available: {available}",
             )
 
+        t0 = time.monotonic()
         try:
             output = await skill.handler(_skill_ctx=ctx, **kwargs)
-            return SkillResult(skill_name=name, success=True, output=output)
+            result = SkillResult(skill_name=name, success=True, output=output)
         except Exception as e:
             log.error("skill_execution_error", skill=name, error=str(e))
-            return SkillResult(skill_name=name, success=False, error=str(e))
+            result = SkillResult(skill_name=name, success=False, error=str(e))
+
+        duration_ms = int((time.monotonic() - t0) * 1000)
+
+        # Fire-and-forget persistence
+        if ctx.db_pool is not None:
+            try:
+                from silkroute.db.repositories.skill_executions import insert_skill_execution
+
+                await insert_skill_execution(
+                    ctx.db_pool,
+                    skill_name=name,
+                    session_id=ctx.session_id,
+                    project_id=ctx.project_id,
+                    success=result.success,
+                    cost_usd=result.cost_usd,
+                    duration_ms=duration_ms,
+                    output_text=result.output,
+                    error_message=result.error,
+                )
+            except Exception as exc:
+                log.warning("skill_execution_persist_failed", skill=name, error=str(exc))
+
+        return result
 
     def mount(self, tool_registry: ToolRegistry, ctx: SkillContext) -> None:
         """Bridge all skills into a ToolRegistry as regular tools.
