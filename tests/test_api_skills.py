@@ -7,6 +7,8 @@ from fastapi.testclient import TestClient
 
 from silkroute.api.app import create_app
 from silkroute.config.settings import SilkRouteSettings
+from silkroute.mantis.skills import SkillRegistry
+from silkroute.mantis.skills.builtin import register_builtin_skills
 from silkroute.mantis.skills.models import SkillCategory
 
 
@@ -17,6 +19,9 @@ def app(test_settings: SilkRouteSettings) -> TestClient:
     application.state.redis = None
     application.state.queue = None
     application.state.db_pool = None
+    registry = SkillRegistry()
+    register_builtin_skills(registry)
+    application.state.skill_registry = registry
     return TestClient(application, raise_server_exceptions=False)
 
 
