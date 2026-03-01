@@ -7,6 +7,7 @@ allocate_budget() distributes the plan's total budget proportionally by tier.
 from __future__ import annotations
 
 import asyncio
+import copy
 from dataclasses import dataclass, field
 
 from silkroute.mantis.orchestrator.models import OrchestrationPlan
@@ -52,6 +53,14 @@ class BudgetTracker:
             self._spent_usd += amount
             return True
 
+    async def settle(self, reserved: float, actual: float) -> None:
+        """Settle a reservation: release the difference between reserved and actual.
+
+        Called after a sub-task completes to adjust for over-reservation.
+        """
+        async with self._lock:
+            self._spent_usd -= (reserved - actual)
+
 
 # Tier weights for proportional budget allocation
 _TIER_WEIGHTS = {
@@ -68,20 +77,23 @@ def allocate_budget(plan: OrchestrationPlan) -> OrchestrationPlan:
     """Distribute the plan's total budget proportionally across sub-tasks.
 
     Budget is allocated by tier weight with a 10% contingency reserve
-    and a $0.01 floor per sub-task. Modifies sub_tasks in place.
+    and a $0.01 floor per sub-task. Returns a deep copy — the original
+    plan is never mutated.
     """
     if not plan.sub_tasks:
         return plan
 
-    available = plan.total_budget_usd * (1.0 - _CONTINGENCY_FRACTION)
-    weights = [_TIER_WEIGHTS.get(st.tier_hint, 2.0) for st in plan.sub_tasks]
+    result = copy.deepcopy(plan)
+
+    available = result.total_budget_usd * (1.0 - _CONTINGENCY_FRACTION)
+    weights = [_TIER_WEIGHTS.get(st.tier_hint, 2.0) for st in result.sub_tasks]
     total_weight = sum(weights)
 
     if total_weight == 0:
         total_weight = 1.0
 
-    for st, w in zip(plan.sub_tasks, weights, strict=True):
+    for st, w in zip(result.sub_tasks, weights, strict=True):
         allocated = (w / total_weight) * available
         st.budget_usd = max(allocated, _FLOOR_USD)
 
-    return plan
+    return result

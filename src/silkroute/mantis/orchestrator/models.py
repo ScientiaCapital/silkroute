@@ -17,6 +17,18 @@ from silkroute.mantis.runtime.interface import AgentResult, RuntimeType
 
 
 @dataclass
+class RetryConfig:
+    """Retry configuration for sub-task execution."""
+
+    max_retries: int = 3
+    backoff_base: float = 1.0
+    backoff_factor: float = 2.0
+    retryable_statuses: frozenset[str] = field(
+        default_factory=lambda: frozenset({"failed", "timeout"})
+    )
+
+
+@dataclass
 class SubTask:
     """A single unit of work delegated to a child runtime."""
 

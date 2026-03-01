@@ -26,6 +26,7 @@ from silkroute.mantis.orchestrator.middleware import (
     BudgetMiddleware,
     LoggingMiddleware,
     MiddlewareContext,
+    RetryConfig,
     ValidationMiddleware,
 )
 from silkroute.mantis.orchestrator.models import (
@@ -168,7 +169,8 @@ class OrchestratorRuntime:
                 "sub_tasks": [st.id for st in stage],
             })
 
-            for st in stage:
+            # R2: Execute sub-tasks within a stage in parallel
+            async def _run_sub_task(st: SubTask) -> dict[str, Any]:
                 child = self._child_factory(st.runtime_type)
                 child_cfg = RuntimeConfig(
                     runtime_type=st.runtime_type,
@@ -178,18 +180,28 @@ class OrchestratorRuntime:
                 try:
                     result = await child.invoke(st.description, child_cfg)
                     await tracker.record_spend(result.cost_usd)
-                    yield json.dumps({
+                    return {
                         "type": "sub_task_completed",
                         "sub_task_id": st.id,
                         "status": result.status,
                         "output": result.output[:500],
-                    })
-                except Exception as exc:
-                    yield json.dumps({
+                    }
+                except (
+                    asyncio.TimeoutError,
+                    BudgetExhaustedError,
+                    RuntimeError,
+                    OSError,
+                    ValueError,
+                ) as exc:
+                    return {
                         "type": "sub_task_error",
                         "sub_task_id": st.id,
                         "error": str(exc),
-                    })
+                    }
+
+            results = await asyncio.gather(*[_run_sub_task(st) for st in stage])
+            for event in results:
+                yield json.dumps(event)
 
     async def _execute_stage(
         self,
@@ -240,7 +252,7 @@ class OrchestratorRuntime:
                 elapsed_ms=int(time.monotonic() * 1000) - start_ms,
             )
 
-        # Execute via child runtime
+        # Execute via child runtime with optional retry
         child = self._child_factory(sub_task.runtime_type)
         child_cfg = RuntimeConfig(
             runtime_type=sub_task.runtime_type,
@@ -248,15 +260,37 @@ class OrchestratorRuntime:
             budget_limit_usd=sub_task.budget_usd,
         )
 
-        try:
-            result = await child.invoke(sub_task.description, child_cfg)
-        except Exception as exc:
-            log.error(
-                "sub_task_execution_failed",
-                sub_task_id=sub_task.id,
-                error=str(exc),
-            )
-            result = AgentResult(status="failed", error=str(exc))
+        retry_config: RetryConfig | None = ctx.metadata.get("retry_config")
+        max_attempts = (retry_config.max_retries + 1) if retry_config else 1
+
+        result = AgentResult(status="failed", error="not executed")
+        for attempt in range(max_attempts):
+            try:
+                result = await child.invoke(sub_task.description, child_cfg)
+            except Exception as exc:
+                log.error(
+                    "sub_task_execution_failed",
+                    sub_task_id=sub_task.id,
+                    error=str(exc),
+                    attempt=attempt + 1,
+                )
+                result = AgentResult(status="failed", error=str(exc))
+
+            if (
+                retry_config
+                and attempt < max_attempts - 1
+                and result.status in retry_config.retryable_statuses
+            ):
+                delay = retry_config.backoff_base * (retry_config.backoff_factor ** attempt)
+                log.info(
+                    "sub_task_retry",
+                    sub_task_id=sub_task.id,
+                    attempt=attempt + 1,
+                    delay=delay,
+                )
+                await asyncio.sleep(delay)
+                continue
+            break
 
         # Run after middleware
         for mw in reversed(middleware):
