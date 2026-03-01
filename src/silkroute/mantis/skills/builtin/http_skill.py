@@ -64,7 +64,11 @@ async def _http_request_handler(
         return result
     except httpx.TimeoutException:
         return f"Error: Request timed out after {timeout}s"
+    except httpx.RequestError as e:
+        log.warning("http_skill_request_error", error=str(e))
+        return f"Error making HTTP request: {e}"
     except Exception as e:
+        log.error("http_skill_unexpected_error", error=str(e), exc_info=True)
         return f"Error making HTTP request: {e}"
 
 

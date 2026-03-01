@@ -7,8 +7,10 @@ agents see skills as regular tools.
 
 from __future__ import annotations
 
+import asyncio
 from typing import TYPE_CHECKING
 
+import asyncpg
 import structlog
 
 from silkroute.mantis.skills.models import SkillCategory, SkillContext, SkillResult, SkillSpec
@@ -67,8 +69,10 @@ class SkillRegistry:
         try:
             output = await skill.handler(_skill_ctx=ctx, **kwargs)
             result = SkillResult(skill_name=name, success=True, output=output)
+        except asyncio.CancelledError:
+            raise
         except Exception as e:
-            log.error("skill_execution_error", skill=name, error=str(e))
+            log.error("skill_execution_error", skill=name, error=str(e), exc_info=True)
             result = SkillResult(skill_name=name, success=False, error=str(e))
 
         duration_ms = int((time.monotonic() - t0) * 1000)
@@ -89,7 +93,7 @@ class SkillRegistry:
                     output_text=result.output,
                     error_message=result.error,
                 )
-            except Exception as exc:
+            except (asyncpg.PostgresError, OSError, TimeoutError) as exc:
                 log.warning("skill_execution_persist_failed", skill=name, error=str(exc))
 
         return result
@@ -111,8 +115,10 @@ class SkillRegistry:
             ) -> str:
                 try:
                     return await _s.handler(_skill_ctx=_c, **kw)
+                except asyncio.CancelledError:
+                    raise
                 except Exception as e:
-                    log.error("mounted_skill_error", skill=_s.name, error=str(e))
+                    log.error("mounted_skill_error", skill=_s.name, error=str(e), exc_info=True)
                     return f"Error in skill '{_s.name}': {e}"
 
             tool_registry.register(ToolSpec(

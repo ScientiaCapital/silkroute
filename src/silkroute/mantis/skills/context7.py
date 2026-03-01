@@ -121,8 +121,18 @@ class Context7Client:
                     version=str(first.get("version", "unknown")),
                     trust_score=float(first.get("trustScore", first.get("trust_score", 0.0))),
                 )
+            except httpx.HTTPStatusError as e:
+                log.warning(
+                    "context7_resolve_http_error",
+                    library=name,
+                    status=e.response.status_code,
+                )
+                return None
+            except httpx.RequestError as e:
+                log.warning("context7_resolve_request_error", library=name, error=str(e))
+                return None
             except Exception as e:
-                log.warning("context7_resolve_error", library=name, error=str(e))
+                log.warning("context7_resolve_error", library=name, error=str(e), exc_info=True)
                 return None
 
     async def get_docs(self, library_id: str, query: str) -> list[DocSnippet]:
@@ -167,8 +177,27 @@ class Context7Client:
                     tokens_used += len(content)
 
                 return snippets
+            except httpx.HTTPStatusError as e:
+                log.warning(
+                    "context7_get_docs_http_error",
+                    library_id=library_id,
+                    status=e.response.status_code,
+                )
+                return []
+            except httpx.RequestError as e:
+                log.warning(
+                    "context7_get_docs_request_error",
+                    library_id=library_id,
+                    error=str(e),
+                )
+                return []
             except Exception as e:
-                log.warning("context7_docs_error", library_id=library_id, error=str(e))
+                log.warning(
+                    "context7_docs_error",
+                    library_id=library_id,
+                    error=str(e),
+                    exc_info=True,
+                )
                 return []
 
     async def query(self, library_name: str, query: str) -> Context7Result:
