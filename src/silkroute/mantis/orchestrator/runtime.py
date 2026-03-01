@@ -275,12 +275,31 @@ class OrchestratorRuntime:
         for attempt in range(max_attempts):
             try:
                 result = await child.invoke(sub_task.description, child_cfg)
+            except asyncio.CancelledError:
+                raise
+            except (TimeoutError, ConnectionError, OSError) as exc:
+                log.warning(
+                    "sub_task_transient_error",
+                    sub_task_id=sub_task.id,
+                    error=str(exc),
+                    attempt=attempt + 1,
+                )
+                result = AgentResult(status="failed", error=str(exc))
+            except (ValueError, TypeError) as exc:
+                log.error(
+                    "sub_task_permanent_error",
+                    sub_task_id=sub_task.id,
+                    error=str(exc),
+                )
+                result = AgentResult(status="failed", error=str(exc))
+                break
             except Exception as exc:
                 log.error(
                     "sub_task_execution_failed",
                     sub_task_id=sub_task.id,
                     error=str(exc),
                     attempt=attempt + 1,
+                    exc_info=True,
                 )
                 result = AgentResult(status="failed", error=str(exc))
 
