@@ -319,12 +319,31 @@ class SupervisorRuntime:
         for attempt in range(max_retries + 1):
             try:
                 result = await child.invoke(step.description, child_cfg)
+            except asyncio.CancelledError:
+                raise
+            except (TimeoutError, ConnectionError, OSError) as exc:
+                log.warning(
+                    "supervisor_step_transient_error",
+                    step_id=step.id,
+                    attempt=attempt + 1,
+                    error=str(exc),
+                )
+                result = AgentResult(status="failed", error=str(exc))
+            except (ValueError, TypeError) as exc:
+                log.error(
+                    "supervisor_step_permanent_error",
+                    step_id=step.id,
+                    error=str(exc),
+                )
+                result = AgentResult(status="failed", error=str(exc))
+                break
             except Exception as exc:
                 log.error(
                     "supervisor_step_failed",
                     step_id=step.id,
                     attempt=attempt + 1,
                     error=str(exc),
+                    exc_info=True,
                 )
                 result = AgentResult(status="failed", error=str(exc))
 

@@ -16,6 +16,7 @@ import time
 from pathlib import Path
 from typing import Any
 
+import asyncpg
 import litellm
 import structlog
 from rich.console import Console
@@ -105,7 +106,7 @@ async def run_agent(
             from silkroute.db.pool import get_pool
 
             pool = await get_pool()
-        except Exception as exc:
+        except (ImportError, asyncpg.PostgresError, OSError, TimeoutError) as exc:
             log.warning("db_init_skipped", error=str(exc))
 
     if pool is not None:
@@ -156,9 +157,12 @@ async def run_agent(
                     console.print(f"  [yellow]{global_check.warning}[/yellow]")
                 else:
                     log.warning("global_budget_warning", warning=global_check.warning)
-        except Exception as exc:
+        except (asyncpg.PostgresError, OSError, TimeoutError) as exc:
             log.warning("db_session_init_failed", error=str(exc))
-            pool = None  # Disable DB for this run
+            pool = None
+        except Exception as exc:
+            log.error("db_session_init_unexpected", error=str(exc), exc_info=True)
+            pool = None
 
     pending_db_tasks: list[asyncio.Task[None]] = []
 
@@ -236,7 +240,7 @@ async def run_agent(
                 tool_choice="auto",
             )
         except Exception as e:
-            log.error("llm_call_failed", iteration=i, error=str(e))
+            log.error("llm_call_failed", iteration=i, error=str(e), exc_info=True)
             if not daemon_mode:
                 console.print(f"  [red]LLM error: {e}[/red]")
             session.complete(SessionStatus.FAILED)
@@ -356,7 +360,7 @@ async def run_agent(
             from silkroute.db.repositories import sessions as db_sessions
 
             await db_sessions.close_session(pool, session)
-        except Exception as exc:
+        except (asyncpg.PostgresError, OSError) as exc:
             log.warning("db_session_close_failed", error=str(exc))
 
     # Signal stream end

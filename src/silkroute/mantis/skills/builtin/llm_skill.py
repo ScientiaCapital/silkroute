@@ -6,6 +6,8 @@ and invoke it with structured prompts.
 
 from __future__ import annotations
 
+import asyncio
+
 import structlog
 
 from silkroute.mantis.skills.models import SkillCategory, SkillContext, SkillSpec
@@ -58,8 +60,10 @@ async def _code_review_handler(
         ]
         response = await llm.ainvoke(messages)
         return str(response.content)
+    except asyncio.CancelledError:
+        raise
     except Exception as e:
-        log.error("code_review_llm_error", error=str(e))
+        log.error("code_review_llm_error", error=str(e), exc_info=True)
         return f"Error during code review: {e}"
 
 
@@ -88,8 +92,10 @@ async def _summarize_handler(
         ]
         response = await llm.ainvoke(messages)
         return str(response.content)
+    except asyncio.CancelledError:
+        raise
     except Exception as e:
-        log.error("summarize_llm_error", error=str(e))
+        log.error("summarize_llm_error", error=str(e), exc_info=True)
         return f"Error during summarization: {e}"
 
 

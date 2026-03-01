@@ -6,6 +6,8 @@ for fetching library documentation snippets.
 
 from __future__ import annotations
 
+import asyncio
+
 import structlog
 
 from silkroute.mantis.skills.context7 import Context7Client
@@ -34,8 +36,10 @@ async def _docs_lookup_handler(
 
     try:
         result = await client.query(library_name, query)
+    except asyncio.CancelledError:
+        raise
     except Exception as e:
-        log.warning("docs_lookup_error", library=library_name, error=str(e))
+        log.warning("docs_lookup_error", library=library_name, error=str(e), exc_info=True)
         return (
             f"Documentation lookup for '{library_name}' is currently unavailable. "
             f"Error: {e}. Please check official docs manually."
