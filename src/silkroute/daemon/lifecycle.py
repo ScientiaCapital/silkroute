@@ -12,6 +12,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 
+import asyncpg
 import redis.asyncio as aioredis
 import structlog
 
@@ -108,7 +109,7 @@ async def startup(
                 log.info("db_pool_connected")
             else:
                 log.warning("db_pool_unavailable")
-        except Exception as exc:
+        except (ImportError, asyncpg.PostgresError, OSError, TimeoutError) as exc:
             log.warning("db_pool_init_failed", error=str(exc))
 
     return DaemonContext(
@@ -153,7 +154,7 @@ async def shutdown(
 
             await close_redis()
             log.info("redis_closed")
-        except Exception as exc:
+        except (ImportError, OSError) as exc:
             log.warning("redis_close_failed", error=str(exc))
 
     # Close DB pool
@@ -163,7 +164,7 @@ async def shutdown(
 
             await close_pool()
             log.info("db_pool_closed")
-        except Exception as exc:
+        except (ImportError, asyncpg.PostgresError, OSError) as exc:
             log.warning("db_pool_close_failed", error=str(exc))
 
     # Remove PID file
