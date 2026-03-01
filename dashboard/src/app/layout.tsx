@@ -26,6 +26,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <p className="text-xs text-neutral-500">Chinese LLM Orchestrator</p>
           </div>
           <NavLink href="/" label="Overview" icon="📊" />
+          <NavLink href="/projects" label="Projects" icon="📁" />
           <NavLink href="/models" label="Models" icon="🤖" />
           <NavLink href="/budget" label="Budget" icon="💰" />
           <div className="mt-auto px-4 py-3 text-xs text-neutral-600">

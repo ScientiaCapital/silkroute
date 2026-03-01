@@ -1,10 +1,52 @@
+import { fetchProjects, fetchProjectBudget } from "@/lib/api";
 import type { BudgetSnapshot } from "@/lib/types";
 
 const mockBudgets: BudgetSnapshot[] = [
   { projectId: "default", projectName: "Default Project", budgetMonthlyUsd: 200, spentThisMonth: 0, remaining: 200, status: "OK" },
-  { projectId: "lang-core", projectName: "lang-core", budgetMonthlyUsd: 2.85, spentThisMonth: 0, remaining: 2.85, status: "OK" },
-  { projectId: "signal-siphon", projectName: "signal-siphon", budgetMonthlyUsd: 2.85, spentThisMonth: 0, remaining: 2.85, status: "OK" },
 ];
+
+async function getBudgets(): Promise<BudgetSnapshot[]> {
+  try {
+    const { projects } = await fetchProjects();
+    if (projects.length === 0) return mockBudgets;
+
+    const budgets: BudgetSnapshot[] = await Promise.all(
+      projects.map(async (p) => {
+        try {
+          const b = await fetchProjectBudget(p.id);
+          const spent = b.monthly_spent_usd;
+          const limit = b.monthly_limit_usd ?? p.budget_monthly_usd;
+          const remaining = limit - spent;
+          const pct = limit > 0 ? spent / limit : 0;
+          let status: BudgetSnapshot["status"] = "OK";
+          if (pct >= 1.0) status = "EXCEEDED";
+          else if (pct >= 0.8) status = "CRITICAL";
+          else if (pct >= 0.5) status = "WARNING";
+          return {
+            projectId: p.id,
+            projectName: p.name,
+            budgetMonthlyUsd: limit,
+            spentThisMonth: spent,
+            remaining,
+            status,
+          };
+        } catch {
+          return {
+            projectId: p.id,
+            projectName: p.name,
+            budgetMonthlyUsd: p.budget_monthly_usd,
+            spentThisMonth: 0,
+            remaining: p.budget_monthly_usd,
+            status: "OK" as const,
+          };
+        }
+      })
+    );
+    return budgets;
+  } catch {
+    return mockBudgets;
+  }
+}
 
 const statusColors: Record<string, string> = {
   OK: "text-green-500",
@@ -13,9 +55,10 @@ const statusColors: Record<string, string> = {
   EXCEEDED: "text-red-700",
 };
 
-export default function BudgetPage() {
-  const totalBudget = mockBudgets.reduce((sum, b) => sum + b.budgetMonthlyUsd, 0);
-  const totalSpent = mockBudgets.reduce((sum, b) => sum + b.spentThisMonth, 0);
+export default async function BudgetPage() {
+  const budgets = await getBudgets();
+  const totalBudget = budgets.reduce((sum, b) => sum + b.budgetMonthlyUsd, 0);
+  const totalSpent = budgets.reduce((sum, b) => sum + b.spentThisMonth, 0);
 
   return (
     <div>
@@ -51,7 +94,7 @@ export default function BudgetPage() {
             </tr>
           </thead>
           <tbody>
-            {mockBudgets.map((budget) => (
+            {budgets.map((budget) => (
               <tr key={budget.projectId} className="border-b border-neutral-800/50 hover:bg-neutral-800/30">
                 <td className="p-4 font-medium">{budget.projectName}</td>
                 <td className="p-4 text-right font-mono text-sm">${budget.budgetMonthlyUsd.toFixed(2)}</td>

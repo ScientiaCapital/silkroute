@@ -1,13 +1,28 @@
 import { ALL_MODELS } from "@/lib/models";
+import { fetchGlobalBudget } from "@/lib/api";
 
-const stats = [
-  { label: "Total Models", value: ALL_MODELS.length.toString(), sub: "across 4 providers" },
-  { label: "Free Models", value: ALL_MODELS.filter(m => m.isFree).length.toString(), sub: "zero cost" },
-  { label: "Today's Spend", value: "$0.00", sub: "budget: $10.00/day" },
-  { label: "Active Sessions", value: "0", sub: "idle" },
-];
+async function getBudgetStats() {
+  try {
+    const budget = await fetchGlobalBudget();
+    return {
+      todaySpend: `$${budget.daily_spent_usd.toFixed(2)}`,
+      dailyBudget: `$${budget.daily_limit_usd.toFixed(2)}`,
+    };
+  } catch {
+    return { todaySpend: "$0.00", dailyBudget: "$10.00" };
+  }
+}
 
-export default function DashboardPage() {
+export default async function DashboardPage() {
+  const { todaySpend, dailyBudget } = await getBudgetStats();
+
+  const stats = [
+    { label: "Total Models", value: ALL_MODELS.length.toString(), sub: "across 4 providers" },
+    { label: "Free Models", value: ALL_MODELS.filter(m => m.isFree).length.toString(), sub: "zero cost" },
+    { label: "Today's Spend", value: todaySpend, sub: `budget: ${dailyBudget}/day` },
+    { label: "Active Sessions", value: "0", sub: "idle" },
+  ];
+
   return (
     <div>
       <h1 className="text-2xl font-bold mb-1">Dashboard Overview</h1>

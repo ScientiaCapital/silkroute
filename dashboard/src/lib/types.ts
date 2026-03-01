@@ -36,3 +36,36 @@ export interface DashboardStats {
   modelHealth: "healthy" | "degraded" | "down";
   freeRequestsPct: number;
 }
+
+export interface Project {
+  id: string;
+  name: string;
+  description: string;
+  github_repo: string;
+  budget_monthly_usd: number;
+  budget_daily_usd: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ProjectListResponse {
+  projects: Project[];
+  total: number;
+}
+
+export interface GlobalBudgetResponse {
+  daily_spent_usd: number;
+  daily_limit_usd: number;
+  monthly_spent_usd: number;
+  monthly_limit_usd: number;
+  hourly_rate_usd: number;
+  allowed: boolean;
+  warning: string;
+}
+
+export interface ProjectBudgetResponse {
+  project_id: string;
+  monthly_spent_usd: number;
+  daily_spent_usd: number;
+  monthly_limit_usd: number | null;
+}
