@@ -1,6 +1,6 @@
 # SilkRoute Backlog
 
-**Updated:** 2026-03-01 (Phase 8 complete)
+**Updated:** 2026-03-02 (Phase 9 complete)
 
 ## Priority: Medium
 
@@ -12,6 +12,7 @@
 | 20 | Supervisor route ordering risk: future routes must maintain GET /sessions before GET /sessions/{id} | Observer INFO (Phase 6b) | XS | Low | --- | Future |
 | 21 | `_extract_cost()` still has silent `except Exception: pass` (canonical pattern) | Observer INFO (Phase 7) | XS | Low | --- | Future |
 | 22 | Pre-existing test failures: 6 deepagents + 1 langchain_openai collection error | Observer INFO (Phase 7) | S | Low | --- | Future |
+| 23 | Dockerfile HEALTHCHECK uses shell-form CMD with `${PORT:-8787}` — monitor on Railway deploy | Observer WARNING (Phase 9) | XS | Low | --- | First Railway deploy |
 
 ## Priority: Low (future phases)
 
@@ -24,7 +25,16 @@
 | 15 | API rate limiting tiers | Plan scope exclusion (Phase 2) | M | Medium | --- | Future |
 | 16 | Ralph autonomy boundary — no human approval gate | Observer R1 (Phase 4) | M | Low | --- | Future |
 
-## Resolved (This Session — Phase 8)
+## Resolved (This Session — Phase 9)
+
+| Item | Resolution |
+|------|-----------|
+| Lint BLOCKER: ANN001/ANN202 on test_api_runtime.py:90 | RESOLVED — Added `AsyncGenerator[str, None]` annotations to `mock_stream` |
+| Test fixture duplication in test_lifespan.py | RESOLVED — Replaced `_make_settings()` with conftest `test_settings` fixture |
+| Test fixture duplication in test_cli.py | RESOLVED — Replaced `_make_test_settings()` with conftest `test_settings` fixture |
+| Railway deployment infrastructure | RESOLVED — Dockerfile, start.sh, railway.toml, .dockerignore, docker-compose.prod.yml |
+
+## Resolved (Phase 8)
 
 | Item | Resolution |
 |------|-----------|
