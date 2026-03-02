@@ -1,0 +1,35 @@
+# Local production testing — validates Dockerfile before Railway deploy
+#
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+#   curl http://localhost:8787/health
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml down
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: silkroute-api
+    ports:
+      - "8787:8787"
+    environment:
+      PORT: "8787"
+      SILKROUTE_DB_POSTGRES_URL: postgresql://silkroute:silkroute@postgres:5432/silkroute
+      SILKROUTE_DB_REDIS_URL: redis://redis:6379/0
+      SILKROUTE_API_KEY: ""
+      SILKROUTE_API_HOST: "0.0.0.0"
+      SILKROUTE_API_CORS_ORIGINS: '["http://localhost:3000"]'
+      SILKROUTE_OPENROUTER_API_KEY: ${SILKROUTE_OPENROUTER_API_KEY:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8787/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s

@@ -1,0 +1,44 @@
+# Version control
+.git/
+.gitignore
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+
+# Tests (not needed in production image)
+tests/
+
+# Dashboard (deployed separately on Vercel)
+dashboard/
+
+# Claude Code / IDE
+.claude/
+.vscode/
+.idea/
+
+# Environment and secrets
+.env
+.env.*
+
+# Docker compose (not needed inside container)
+docker-compose.yml
+docker-compose.prod.yml
+
+# Documentation (README.md is kept — hatchling requires it for the wheel build)
+*.md
+!README.md
+docs/
+LICENSE
+
+# OS
+.DS_Store
+Thumbs.db

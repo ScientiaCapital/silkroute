@@ -8,26 +8,9 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from click.testing import CliRunner
 
 from silkroute.cli import main
-from silkroute.config.settings import (
-    ApiConfig,
-    DatabaseConfig,
-    ProviderConfig,
-    SilkRouteSettings,
-)
+from silkroute.config.settings import SilkRouteSettings
 
 runner = CliRunner()
-
-
-def _make_test_settings() -> SilkRouteSettings:
-    """Return a minimal SilkRouteSettings instance for testing."""
-    return SilkRouteSettings(
-        providers=ProviderConfig(ollama_enabled=True),
-        api=ApiConfig(api_key=""),
-        database=DatabaseConfig(
-            postgres_url="postgresql://silkroute:silkroute@localhost:5432/silkroute",
-            redis_url="redis://localhost:6379/0",
-        ),
-    )
 
 
 class TestSimpleCommands:
@@ -229,8 +212,9 @@ class TestProjectsCommands:
         mock_create_pool: AsyncMock,
         mock_list_projects: AsyncMock,
         mock_load_settings: MagicMock,
+        test_settings: SilkRouteSettings,
     ) -> None:
-        mock_load_settings.return_value = _make_test_settings()
+        mock_load_settings.return_value = test_settings
         mock_create_pool.return_value = self._mock_pool()
         mock_list_projects.return_value = [
             {
@@ -254,8 +238,9 @@ class TestProjectsCommands:
         mock_create_pool: AsyncMock,
         mock_list_projects: AsyncMock,
         mock_load_settings: MagicMock,
+        test_settings: SilkRouteSettings,
     ) -> None:
-        mock_load_settings.return_value = _make_test_settings()
+        mock_load_settings.return_value = test_settings
         mock_create_pool.return_value = self._mock_pool()
         mock_list_projects.return_value = []
 
@@ -271,8 +256,9 @@ class TestProjectsCommands:
         mock_create_pool: AsyncMock,
         mock_create_project: AsyncMock,
         mock_load_settings: MagicMock,
+        test_settings: SilkRouteSettings,
     ) -> None:
-        mock_load_settings.return_value = _make_test_settings()
+        mock_load_settings.return_value = test_settings
         mock_create_pool.return_value = self._mock_pool()
         mock_create_project.return_value = {
             "id": "myproj",
@@ -296,8 +282,9 @@ class TestProjectsCommands:
         mock_create_pool: AsyncMock,
         mock_get_project: AsyncMock,
         mock_load_settings: MagicMock,
+        test_settings: SilkRouteSettings,
     ) -> None:
-        mock_load_settings.return_value = _make_test_settings()
+        mock_load_settings.return_value = test_settings
         mock_create_pool.return_value = self._mock_pool()
         mock_get_project.return_value = {
             "id": "myproj",
@@ -322,8 +309,9 @@ class TestProjectsCommands:
         mock_create_pool: AsyncMock,
         mock_get_project: AsyncMock,
         mock_load_settings: MagicMock,
+        test_settings: SilkRouteSettings,
     ) -> None:
-        mock_load_settings.return_value = _make_test_settings()
+        mock_load_settings.return_value = test_settings
         mock_create_pool.return_value = self._mock_pool()
         mock_get_project.return_value = None
 
@@ -339,8 +327,9 @@ class TestProjectsCommands:
         mock_create_pool: AsyncMock,
         mock_delete_project: AsyncMock,
         mock_load_settings: MagicMock,
+        test_settings: SilkRouteSettings,
     ) -> None:
-        mock_load_settings.return_value = _make_test_settings()
+        mock_load_settings.return_value = test_settings
         mock_create_pool.return_value = self._mock_pool()
         mock_delete_project.return_value = True
 
@@ -356,8 +345,9 @@ class TestProjectsCommands:
         mock_create_pool: AsyncMock,
         mock_delete_project: AsyncMock,
         mock_load_settings: MagicMock,
+        test_settings: SilkRouteSettings,
     ) -> None:
-        mock_load_settings.return_value = _make_test_settings()
+        mock_load_settings.return_value = test_settings
         mock_create_pool.return_value = self._mock_pool()
         mock_delete_project.return_value = False
 
@@ -371,8 +361,9 @@ class TestProjectsCommands:
         self,
         mock_create_pool: AsyncMock,
         mock_load_settings: MagicMock,
+        test_settings: SilkRouteSettings,
     ) -> None:
-        mock_load_settings.return_value = _make_test_settings()
+        mock_load_settings.return_value = test_settings
         mock_create_pool.side_effect = Exception("connection refused")
 
         result = runner.invoke(main, ["projects", "list"])
