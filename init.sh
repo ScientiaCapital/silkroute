@@ -2,7 +2,7 @@
 set -e
 echo "=== silkroute setup ==="
 
-# Python core
+# Python core (requires 3.12+)
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -e ".[dev]"

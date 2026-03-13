@@ -14,6 +14,7 @@
 - Model registry lives in `src/silkroute/providers/models.py`
 
 ## Python Standards
+- Requires Python 3.12+ (`pyproject.toml` enforces `>=3.12`)
 - CLI: Click + Rich (`src/silkroute/cli.py`)
 - Config: Pydantic Settings (`src/silkroute/config/settings.py`)
 - Tests: pytest — run with `pytest --cov=src`

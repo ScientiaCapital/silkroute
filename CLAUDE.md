@@ -24,6 +24,7 @@ silkroute/
 
 | Layer | Technology |
 |-------|-----------|
+| Python | 3.12+ |
 | Python CLI | Click + Rich |
 | Configuration | Pydantic Settings |
 | Model Registry | Dataclasses + Enums |
