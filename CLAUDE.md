@@ -3,45 +3,7 @@
 **SilkRoute** — AI agent orchestrator for Chinese LLMs.
 Hybrid Python core + Next.js dashboard architecture.
 
----
-
-## MANDATORY: Observer Protocol
-
-**You MUST follow this protocol before writing ANY code.** No exceptions.
-
-### Step 1: Classify Task Scope
-
-| Scope | Criteria | Observer Required |
-|-------|----------|-------------------|
-| **MINIMAL** | Typos, comments, single config tweak | None |
-| **SMALL** | 1-3 files changed, no new dependencies | observer-lite (Haiku) |
-| **STANDARD** | 4-10 files, or any new dependency | observer-full (Sonnet) |
-| **FULL** | >10 files, new architecture, new patterns | observer-full + feature contract |
-
-### Step 2: Spawn Observer (if SMALL or above)
-
-For SMALL scope: Task tool with subagent_type="observer-lite"
-For STANDARD/FULL scope: Task tool with subagent_type="observer-full"
-
-### Step 3: For FULL scope — Create Feature Contract First
-
-Before coding, create `.claude/contracts/[feature-name].md`
-
-### Step 4: Verify Observer Ran
-
-Confirm `.claude/OBSERVER_QUALITY.md` has a real date before making code changes.
-
-### Scope Escalation Rule
-
-Upgrade from Lite to Full if: >5 files modified, new dependency added, or scope expanded.
-
----
-
-## Project Overview
-
-Hybrid Python + Next.js project for orchestrating Chinese LLMs.
-
-### Architecture
+## Architecture
 
 ```
 silkroute/
@@ -58,7 +20,7 @@ silkroute/
 └── tests/                  # pytest test suite
 ```
 
-### Tech Stack
+## Tech Stack
 
 | Layer | Technology |
 |-------|-----------|
@@ -71,7 +33,7 @@ silkroute/
 | LLM Proxy | LiteLLM |
 | Providers | DeepSeek, Qwen, GLM, Kimi (via OpenRouter) |
 
-### Dev Commands
+## Dev Commands
 
 ```bash
 # Python
@@ -80,25 +42,23 @@ pip install -e ".[dev]"
 silkroute --version         # Should print 0.1.0
 silkroute models            # Show 13 Chinese models
 pytest                      # Run Python tests
-pytest --cov=src           # With coverage
-ruff check src/            # Lint
+pytest --cov=src            # With coverage
+ruff check src/             # Lint
 
 # Dashboard
 cd dashboard
 npm install
 npm run dev                 # localhost:3000
-npm run build              # Production build
-npm run lint               # ESLint
+npm run lint                # ESLint
 
 # Docker (full stack)
-docker compose up -d       # Start Postgres + Redis + LiteLLM
-docker compose down        # Stop all
+docker compose up -d        # Start Postgres + Redis + LiteLLM
+docker compose down         # Stop all
 ```
 
-### Key Conventions
+## Key Conventions
 
 - **No OpenAI** — Chinese LLMs only (DeepSeek, Qwen, GLM, Kimi)
 - **3-tier routing** — Free → Standard → Premium based on task complexity
 - **Budget governance** — Per-project hard caps, daily pacing
-- **GitHub org** — ScientiaCapital/silkroute (not tkipper)
-
+- **GitHub org** — ScientiaCapital/silkroute
