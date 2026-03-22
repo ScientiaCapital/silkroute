@@ -506,6 +506,145 @@ def supervisor_ralph(once: bool) -> None:
 
 
 @main.group()
+def research() -> None:
+    """Autonomous code research and improvement (autoresearch)."""
+    pass
+
+
+@research.command("start")
+@click.option(
+    "--target", "-t",
+    type=click.Choice(["code"]),
+    default="code",
+    help="Research target",
+)
+@click.option(
+    "--model", "-m",
+    default="deepseek/deepseek-v3.2",
+    help="OpenRouter model ID for the researcher agent",
+)
+@click.option(
+    "--max-experiments",
+    default=0,
+    type=int,
+    help="Max experiments to run (0 = infinite)",
+)
+def research_start(target: str, model: str, max_experiments: int) -> None:
+    """Start the autoresearch experiment loop.
+
+    Runs forever (or up to --max-experiments) on a dedicated git branch.
+    The Chinese LLM researcher proposes changes, evaluates them via pytest,
+    and keeps improvements. Press Ctrl+C for graceful shutdown.
+    """
+    import asyncio
+    from pathlib import Path
+
+    from silkroute.autoresearch.engine import ResearchEngine
+    from silkroute.autoresearch.targets.code import CodeImproverTarget
+
+    project_root = Path.cwd()
+
+    targets = {
+        "code": lambda: CodeImproverTarget(project_root),
+    }
+    research_target = targets[target]()
+
+    engine = ResearchEngine(
+        target=research_target,
+        model_id=model,
+        project_root=project_root,
+        max_experiments=max_experiments,
+    )
+
+    try:
+        asyncio.run(engine.run())
+    except KeyboardInterrupt:
+        console.print("\n[yellow]Research interrupted.[/yellow]")
+
+
+@research.command("results")
+@click.option("--last", "-n", default=20, type=int, help="Show last N experiments")
+def research_results(last: int) -> None:
+    """Show recent experiment results from the ledger."""
+    from pathlib import Path
+
+    from silkroute.autoresearch.ledger import Ledger
+
+    ledger = Ledger(Path.cwd() / ".silkroute" / "autoresearch" / "results.tsv")
+    entries = ledger.read()
+
+    if not entries:
+        console.print("[yellow]No experiments found. Run 'silkroute research start' first.[/yellow]")
+        return
+
+    table = Table(title="AutoResearch Results")
+    table.add_column("Commit", style="cyan", width=8)
+    table.add_column("Score", style="bold", justify="right", width=8)
+    table.add_column("Pass Rate", justify="right", width=10)
+    table.add_column("Coverage", justify="right", width=10)
+    table.add_column("Status", width=8)
+    table.add_column("Description", style="dim", width=40)
+
+    for entry in entries[-last:]:
+        status_style = {
+            "keep": "[green]keep[/green]",
+            "discard": "[yellow]discard[/yellow]",
+            "crash": "[red]crash[/red]",
+        }.get(entry.status, entry.status)
+
+        table.add_row(
+            entry.commit,
+            f"{entry.score:.4f}",
+            f"{entry.pass_rate:.1%}",
+            f"{entry.coverage:.1%}",
+            status_style,
+            entry.description[:40],
+        )
+
+    console.print(table)
+
+    counts = ledger.count()
+    best = ledger.best()
+    console.print(f"\n  Total: {counts['total']} | Kept: {counts['keep']} | Discarded: {counts['discard']} | Crashed: {counts['crash']}")
+    if best:
+        console.print(f"  Best: {best.score:.4f} ({best.description})")
+
+
+@research.command("status")
+def research_status() -> None:
+    """Show current autoresearch status."""
+    import subprocess as sp
+    from pathlib import Path
+
+    from silkroute.autoresearch.ledger import Ledger
+
+    # Check if on an autoresearch branch
+    result = sp.run(
+        ["git", "branch", "--show-current"],
+        capture_output=True, text=True,
+    )
+    branch = result.stdout.strip()
+
+    if branch.startswith("autoresearch/"):
+        console.print(f"[bold]AutoResearch Active[/bold]")
+        console.print(f"  Branch: [cyan]{branch}[/cyan]")
+    else:
+        console.print(f"[bold]AutoResearch[/bold]")
+        console.print(f"  Branch: {branch} [dim](not on research branch)[/dim]")
+
+    ledger = Ledger(Path.cwd() / ".silkroute" / "autoresearch" / "results.tsv")
+    if ledger.path.exists():
+        counts = ledger.count()
+        best = ledger.best()
+        console.print(f"  Experiments: {counts['total']}")
+        console.print(f"  Kept: {counts['keep']} | Discarded: {counts['discard']} | Crashed: {counts['crash']}")
+        if best:
+            console.print(f"  Best score: {best.score:.4f} ({best.description})")
+    else:
+        console.print("  [dim]No experiments yet.[/dim]")
+
+
+@main.group()
 def skills() -> None:
     """Manage skills and capabilities."""
     pass

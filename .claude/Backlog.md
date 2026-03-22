@@ -1,6 +1,6 @@
 # SilkRoute Backlog
 
-**Updated:** 2026-03-02 (Phase 9 complete)
+**Updated:** 2026-03-22 (Phase 10 complete)
 
 ## Priority: Medium
 
@@ -13,6 +13,10 @@
 | 21 | `_extract_cost()` still has silent `except Exception: pass` (canonical pattern) | Observer INFO (Phase 7) | XS | Low | --- | Future |
 | 22 | Pre-existing test failures: 6 deepagents + 1 langchain_openai collection error | Observer INFO (Phase 7) | S | Low | --- | Future |
 | 23 | Dockerfile HEALTHCHECK uses shell-form CMD with `${PORT:-8787}` — monitor on Railway deploy | Observer WARNING (Phase 9) | XS | Low | --- | First Railway deploy |
+| 24 | AutoResearch: `code.py` runs pytest up to 3x per experiment (eval + build_context) — cache results | Observer INFO (Phase 10) | S | Low | --- | Future |
+| 25 | AutoResearch: add Prompt Lab target (`targets/prompt.py`) | Plan (Phase 10) | M | Medium | --- | Future |
+| 26 | AutoResearch: add Routing Optimizer target (`targets/routing.py`) | Plan (Phase 10) | M | Medium | --- | Future |
+| 27 | AutoResearch: add dashboard page with live experiment leaderboard | Plan (Phase 10) | M | Medium | --- | Future |
 
 ## Priority: Low (future phases)
 
@@ -25,7 +29,16 @@
 | 15 | API rate limiting tiers | Plan scope exclusion (Phase 2) | M | Medium | --- | Future |
 | 16 | Ralph autonomy boundary — no human approval gate | Observer R1 (Phase 4) | M | Low | --- | Future |
 
-## Resolved (This Session — Phase 9)
+## Resolved (This Session — Phase 10)
+
+| Item | Resolution |
+|------|-----------|
+| AutoResearch engine | RESOLVED — 10 new files, engine.py experiment loop, git branch isolation |
+| Code Improver target | RESOLVED — pytest + coverage + ruff eval, composite scoring |
+| CLI integration | RESOLVED — `silkroute research start/status/results` commands |
+| DA Gate: `git add -A` scope issue | RESOLVED — `_git_commit()` now accepts explicit `files` param |
+
+## Resolved (Phase 9)
 
 | Item | Resolution |
 |------|-----------|
