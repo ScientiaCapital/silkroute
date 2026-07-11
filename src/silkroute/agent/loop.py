@@ -26,7 +26,7 @@ from rich.rule import Rule
 from silkroute.agent.classifier import classify_task
 from silkroute.agent.cost_guard import check_budget, check_global_budget
 from silkroute.agent.prompts import build_system_prompt
-from silkroute.agent.router import get_litellm_model_string, select_model
+from silkroute.agent.router import get_litellm_model_string, resolve_api_key, select_model
 from silkroute.agent.session import AgentSession, Iteration, SessionStatus, ToolCall
 from silkroute.agent.tools import create_default_registry, parse_tool_arguments
 from silkroute.config.settings import AgentConfig, BudgetConfig, ModelTier
@@ -183,9 +183,11 @@ async def run_agent(
     messages: list[dict[str, Any]] = [{"role": "system", "content": system_prompt}]
     session.messages = messages
 
-    # Configure litellm
-    if os.environ.get("SILKROUTE_OPENROUTER_API_KEY"):
-        os.environ.setdefault("OPENROUTER_API_KEY", os.environ["SILKROUTE_OPENROUTER_API_KEY"])
+    # Resolve the API key for whichever provider/route was selected and thread
+    # it explicitly into every acompletion call. litellm's native vendor
+    # transports look for their own env var names (DEEPSEEK_API_KEY, etc.) which
+    # we never set — passing api_key= directly is what makes direct routing work.
+    api_key = resolve_api_key(model)
 
     # Suppress litellm's verbose logging
     litellm.suppress_debug_info = True
@@ -238,6 +240,7 @@ async def run_agent(
                 messages=messages,
                 tools=tools,
                 tool_choice="auto",
+                api_key=api_key,
             )
         except Exception as e:
             log.error("llm_call_failed", iteration=i, error=str(e), exc_info=True)

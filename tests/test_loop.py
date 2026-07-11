@@ -183,6 +183,52 @@ class TestRunAgent:
 
 
     @pytest.mark.asyncio
+    async def test_direct_provider_key_threaded_into_acompletion(self, monkeypatch):
+        """A configured direct-provider key is passed to litellm as api_key=."""
+        monkeypatch.delenv("SILKROUTE_OPENROUTER_API_KEY", raising=False)
+        monkeypatch.setenv("SILKROUTE_DEEPSEEK_API_KEY", "sk-deepseek-direct")
+        mock_response = _make_completion_response("Done")
+
+        with patch("silkroute.agent.loop.litellm") as mock_litellm:
+            mock_litellm.acompletion = AsyncMock(return_value=mock_response)
+            mock_litellm.completion_cost.return_value = 0.0001
+            mock_litellm.suppress_debug_info = True
+
+            await run_agent(
+                "Do a task",
+                model_override="deepseek/deepseek-v3.2",
+                budget_limit_usd=1.0,
+                max_iterations=2,
+            )
+
+        _, kwargs = mock_litellm.acompletion.call_args
+        assert kwargs["api_key"] == "sk-deepseek-direct"
+        assert kwargs["model"] == "deepseek/deepseek-chat"
+
+    @pytest.mark.asyncio
+    async def test_openrouter_key_threaded_when_no_direct_key(self, monkeypatch):
+        """With no direct key, the OpenRouter key is threaded as api_key=."""
+        monkeypatch.delenv("SILKROUTE_DEEPSEEK_API_KEY", raising=False)
+        monkeypatch.setenv("SILKROUTE_OPENROUTER_API_KEY", "sk-openrouter")
+        mock_response = _make_completion_response("Done")
+
+        with patch("silkroute.agent.loop.litellm") as mock_litellm:
+            mock_litellm.acompletion = AsyncMock(return_value=mock_response)
+            mock_litellm.completion_cost.return_value = 0.0001
+            mock_litellm.suppress_debug_info = True
+
+            await run_agent(
+                "Do a task",
+                model_override="deepseek/deepseek-v3.2",
+                budget_limit_usd=1.0,
+                max_iterations=2,
+            )
+
+        _, kwargs = mock_litellm.acompletion.call_args
+        assert kwargs["api_key"] == "sk-openrouter"
+        assert kwargs["model"] == "openrouter/deepseek/deepseek-v3.2"
+
+    @pytest.mark.asyncio
     async def test_daemon_mode_no_console_output(self, capsys):
         """daemon_mode=True suppresses Rich console output."""
         mock_response = _make_completion_response("Done in daemon mode.")

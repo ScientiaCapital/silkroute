@@ -3,7 +3,12 @@
 import os
 from unittest.mock import patch
 
-from silkroute.agent.router import _PROXY_MODEL_MAP, get_litellm_model_string, select_model
+from silkroute.agent.router import (
+    _PROXY_MODEL_MAP,
+    get_litellm_model_string,
+    resolve_api_key,
+    select_model,
+)
 from silkroute.config.settings import ModelTier
 from silkroute.providers.models import ALL_MODELS, Capability, Provider
 
@@ -52,12 +57,52 @@ class TestGetLitellmModelString:
             result = get_litellm_model_string(DEEPSEEK_V3_2)
             assert result.startswith("openrouter/")
 
-    def test_bare_id_with_direct_key(self):
+    def test_deepseek_direct_key_uses_native_transport(self):
         from silkroute.providers.models import DEEPSEEK_V3_2
         with patch.dict(os.environ, {"SILKROUTE_DEEPSEEK_API_KEY": "sk-test-123"}):
             result = get_litellm_model_string(DEEPSEEK_V3_2)
-            assert result == "deepseek/deepseek-v3.2"
+            # litellm's native deepseek/ transport expects "deepseek-chat",
+            # NOT the OpenRouter slug "deepseek/deepseek-v3.2".
+            assert result == "deepseek/deepseek-chat"
             assert not result.startswith("openrouter/")
+
+    def test_qwen_direct_key_uses_dashscope_transport(self):
+        from silkroute.providers.models import QWEN3_235B
+        with patch.dict(os.environ, {"SILKROUTE_QWEN_API_KEY": "sk-test-123"}):
+            result = get_litellm_model_string(QWEN3_235B)
+            # litellm's native Qwen transport is "dashscope/", not "qwen/".
+            assert result == "dashscope/qwen-plus"
+            assert not result.startswith("openrouter/")
+
+    def test_glm_direct_key_uses_zai_transport(self):
+        from silkroute.providers.models import GLM_47
+        with patch.dict(os.environ, {"SILKROUTE_GLM_API_KEY": "sk-test-123"}):
+            result = get_litellm_model_string(GLM_47)
+            # litellm's native GLM transport is "zai/", not "z-ai/".
+            assert result == "zai/glm-4.7"
+            assert not result.startswith("openrouter/")
+
+    def test_deepseek_r1_direct_key_maps_to_reasoner(self):
+        from silkroute.providers.models import DEEPSEEK_R1
+        with patch.dict(os.environ, {"SILKROUTE_DEEPSEEK_API_KEY": "sk-test-123"}):
+            result = get_litellm_model_string(DEEPSEEK_R1)
+            assert result == "deepseek/deepseek-reasoner"
+
+    def test_direct_key_for_wrong_provider_falls_back_to_openrouter(self):
+        # A DeepSeek key set, but selecting a GLM model → GLM has no direct
+        # key, so it must fall back to OpenRouter, not leak the DeepSeek route.
+        from silkroute.providers.models import GLM_47
+        with patch.dict(os.environ, {"SILKROUTE_DEEPSEEK_API_KEY": "sk-test-123"}, clear=True):
+            result = get_litellm_model_string(GLM_47)
+            assert result == "openrouter/z-ai/glm-4.7"
+
+    def test_moonshot_direct_key_falls_back_to_openrouter(self):
+        # Moonshot has no native litellm transport in our map — even with a
+        # key set, it must route through OpenRouter.
+        from silkroute.providers.models import KIMI_K2
+        with patch.dict(os.environ, {"SILKROUTE_MOONSHOT_API_KEY": "sk-test-123"}, clear=True):
+            result = get_litellm_model_string(KIMI_K2)
+            assert result == "openrouter/moonshotai/kimi-k2"
 
     def test_proxy_mode_returns_alias(self):
         from silkroute.providers.models import DEEPSEEK_V3_2
@@ -71,6 +116,44 @@ class TestGetLitellmModelString:
             # Ollama models are not in proxy map — should use model_id directly
             result = get_litellm_model_string(QWEN3_30B_LOCAL)
             assert result == "ollama/qwen3:30b-a3b"
+
+
+class TestResolveApiKey:
+    def test_direct_provider_returns_its_own_key(self):
+        from silkroute.providers.models import DEEPSEEK_V3_2
+        with patch.dict(os.environ, {"SILKROUTE_DEEPSEEK_API_KEY": "sk-deepseek"}, clear=True):
+            assert resolve_api_key(DEEPSEEK_V3_2) == "sk-deepseek"
+
+    def test_qwen_direct_provider_returns_its_own_key(self):
+        from silkroute.providers.models import QWEN3_235B
+        with patch.dict(os.environ, {"SILKROUTE_QWEN_API_KEY": "sk-qwen"}, clear=True):
+            assert resolve_api_key(QWEN3_235B) == "sk-qwen"
+
+    def test_no_direct_key_falls_back_to_openrouter_key(self):
+        from silkroute.providers.models import DEEPSEEK_V3_2
+        with patch.dict(os.environ, {"SILKROUTE_OPENROUTER_API_KEY": "sk-or"}, clear=True):
+            assert resolve_api_key(DEEPSEEK_V3_2) == "sk-or"
+
+    def test_moonshot_key_ignored_uses_openrouter_key(self):
+        # Moonshot routes through OpenRouter (no native transport), so the
+        # OpenRouter key must be used even when a Moonshot key exists.
+        from silkroute.providers.models import KIMI_K2
+        with patch.dict(
+            os.environ,
+            {"SILKROUTE_MOONSHOT_API_KEY": "sk-moon", "SILKROUTE_OPENROUTER_API_KEY": "sk-or"},
+            clear=True,
+        ):
+            assert resolve_api_key(KIMI_K2) == "sk-or"
+
+    def test_ollama_returns_none(self):
+        from silkroute.providers.models import QWEN3_30B_LOCAL
+        with patch.dict(os.environ, {}, clear=True):
+            assert resolve_api_key(QWEN3_30B_LOCAL) is None
+
+    def test_proxy_mode_returns_none(self):
+        from silkroute.providers.models import DEEPSEEK_V3_2
+        with patch("silkroute.agent.router._use_litellm_proxy", return_value=True):
+            assert resolve_api_key(DEEPSEEK_V3_2) is None
 
 
 class TestProxyModelMap:

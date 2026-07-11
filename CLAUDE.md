@@ -32,7 +32,7 @@ silkroute/
 | Database | PostgreSQL 16 |
 | Cache | Redis 7 |
 | LLM Proxy | LiteLLM |
-| Providers | DeepSeek, Qwen, GLM, Kimi (via OpenRouter) |
+| Providers | DeepSeek, Qwen, GLM, Kimi — direct vendor APIs when keys are configured, OpenRouter as fallback |
 
 ## Dev Commands
 
@@ -59,7 +59,7 @@ docker compose down         # Stop all
 
 ## Key Conventions
 
-- **No OpenAI** — Chinese LLMs only (DeepSeek, Qwen, GLM, Kimi)
+- **No OpenAI** — Chinese LLMs only (DeepSeek, Qwen, GLM, Kimi); direct vendor APIs when keys are configured, OpenRouter as fallback
 - **3-tier routing** — Free → Standard → Premium based on task complexity
 - **Budget governance** — Per-project hard caps, daily pacing
 - **GitHub org** — ScientiaCapital/silkroute

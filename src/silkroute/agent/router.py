@@ -15,6 +15,7 @@ import os
 from silkroute.config.settings import ModelTier, ProviderConfig
 from silkroute.providers.models import (
     DEFAULT_ROUTING,
+    DIRECT_MODEL_NAMES,
     MODELS_BY_TIER,
     Capability,
     ModelSpec,
@@ -86,7 +87,8 @@ def get_litellm_model_string(model: ModelSpec) -> str:
     Priority order:
     1. LiteLLM proxy mode → ``silkroute-*`` alias (routes via localhost:4000)
     2. Ollama models → model_id as-is
-    3. Direct API key → bare model_id
+    3. Direct API key + native transport → ``<vendor>/<native-name>``
+       (e.g. ``deepseek/deepseek-chat``, ``dashscope/qwen-plus``, ``zai/glm-4.7``)
     4. Otherwise → ``openrouter/`` prefix
     """
     # Proxy mode: use silkroute-* aliases from litellm_config.yaml
@@ -99,10 +101,58 @@ def get_litellm_model_string(model: ModelSpec) -> str:
         return model.model_id
 
     if _is_provider_available(model.provider):
-        return model.model_id
+        native = _direct_litellm_string(model)
+        if native:
+            return native
 
     # Route through OpenRouter
     return f"openrouter/{model.model_id}"
+
+
+# litellm's native direct-vendor transport prefix, keyed by our Provider enum.
+# These are litellm's provider names — note they differ from the OpenRouter
+# slug prefixes: Qwen is "dashscope" (not "qwen") and GLM is "zai" (not "z-ai").
+# Providers absent here (Moonshot, OpenRouter, Ollama) have no direct native
+# transport and fall back to OpenRouter routing.
+_DIRECT_PROVIDER_PREFIX: dict[Provider, str] = {
+    Provider.DEEPSEEK: "deepseek",
+    Provider.QWEN: "dashscope",
+    Provider.GLM: "zai",
+}
+
+
+def _direct_litellm_string(model: ModelSpec) -> str | None:
+    """Translate a registry model into litellm's native direct-vendor string.
+
+    Returns None when the provider has no native transport or the model has no
+    known native name — the caller then falls back to OpenRouter.
+    """
+    prefix = _DIRECT_PROVIDER_PREFIX.get(model.provider)
+    native_name = DIRECT_MODEL_NAMES.get(model.model_id)
+    if not prefix or not native_name:
+        return None
+    return f"{prefix}/{native_name}"
+
+
+def resolve_api_key(model: ModelSpec) -> str | None:
+    """Resolve the API key to pass to ``litellm.acompletion(api_key=...)``.
+
+    Mirrors :func:`get_litellm_model_string`'s routing decision so the key
+    matches the transport actually used:
+
+    - Proxy mode or Ollama → ``None`` (no per-call key needed).
+    - Direct native transport selected → that provider's ``SILKROUTE_*`` key.
+    - Otherwise (OpenRouter fallback) → ``SILKROUTE_OPENROUTER_API_KEY``.
+    """
+    if _use_litellm_proxy():
+        return None
+    if model.provider == Provider.OLLAMA:
+        return None
+    if _is_provider_available(model.provider) and _direct_litellm_string(model):
+        env_key = _PROVIDER_ENV_KEYS.get(model.provider)
+        if env_key:
+            return os.environ.get(env_key)
+    return os.environ.get("SILKROUTE_OPENROUTER_API_KEY")
 
 
 # Maps model_id → LiteLLM proxy alias name (from litellm_config.yaml).

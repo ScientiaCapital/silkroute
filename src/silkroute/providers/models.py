@@ -415,6 +415,37 @@ DEFAULT_ROUTING: dict[ModelTier, list[str]] = {
 }
 
 
+# ============================================================================
+# DIRECT-VENDOR MODEL NAME TRANSLATION
+# ============================================================================
+# Maps the registry's OpenRouter-style ``model_id`` to each vendor's *native*
+# model name, used when a direct provider API key is configured and the router
+# routes through litellm's native vendor transport (deepseek/, dashscope/, zai/)
+# instead of OpenRouter. The native APIs use different model names than the
+# OpenRouter slugs (e.g. OpenRouter "deepseek/deepseek-v3.2" is "deepseek-chat"
+# on api.deepseek.com).
+#
+# WARNING: These native names are UNVERIFIED — no direct DeepSeek/DashScope/Zhipu
+# API keys or docs are available yet. Confirm each against the vendor's own API
+# reference before relying on direct routing in production. Models absent from
+# this map (e.g. Moonshot/Kimi) have no native transport and stay on OpenRouter.
+DIRECT_MODEL_NAMES: dict[str, str] = {
+    # DeepSeek (api.deepseek.com) — litellm "deepseek/" provider
+    "deepseek/deepseek-v3.2": "deepseek-chat",
+    "deepseek/deepseek-r1-0528": "deepseek-reasoner",
+    "deepseek/deepseek-r1-0528:free": "deepseek-reasoner",
+    # Qwen (dashscope.aliyuncs.com) — litellm "dashscope/" provider
+    "qwen/qwen3-235b-a22b-2507": "qwen-plus",
+    "qwen/qwen3-30b-a3b": "qwen-turbo",
+    "qwen/qwen3-coder": "qwen3-coder-plus",
+    "qwen/qwen3-coder:free": "qwen3-coder-plus",
+    # GLM (open.bigmodel.cn / Zhipu) — litellm "zai/" provider
+    "z-ai/glm-4.7": "glm-4.7",
+    "z-ai/glm-5": "glm-5",
+    "z-ai/glm-4.5-air:free": "glm-4.5-air",
+}
+
+
 def get_model(model_id: str) -> ModelSpec | None:
     """Get model specification by ID."""
     return ALL_MODELS.get(model_id)

@@ -4,10 +4,13 @@ from __future__ import annotations
 
 import pytest
 
+from silkroute.providers.models import Provider
 from silkroute.providers.openrouter import (
     _DEFAULT_HEADERS,
     _OPENROUTER_BASE_URL,
+    _PROVIDER_BASE_URLS,
     _resolve_api_key,
+    create_direct_model,
     create_openrouter_model,
 )
 
@@ -55,6 +58,57 @@ class TestCreateOpenrouterModel:
     def test_explicit_api_key_used(self) -> None:
         model = create_openrouter_model(api_key="sk-explicit-key")
         assert model.openai_api_key.get_secret_value() == "sk-explicit-key"
+
+
+class TestCreateDirectModel:
+    """create_direct_model() points ChatOpenAI at each vendor's own endpoint."""
+
+    def test_deepseek_base_url(self) -> None:
+        model = create_direct_model(Provider.DEEPSEEK, "deepseek-chat", api_key="sk-x")
+        assert str(model.openai_api_base) == "https://api.deepseek.com/v1"
+
+    def test_glm_base_url(self) -> None:
+        model = create_direct_model(Provider.GLM, "glm-4.7", api_key="sk-x")
+        assert str(model.openai_api_base) == "https://open.bigmodel.cn/api/paas/v4"
+
+    def test_qwen_base_url(self) -> None:
+        model = create_direct_model(Provider.QWEN, "qwen-plus", api_key="sk-x")
+        assert str(model.openai_api_base) == "https://dashscope.aliyuncs.com/compatible-mode/v1"
+
+    def test_openrouter_base_url(self) -> None:
+        model = create_direct_model(Provider.OPENROUTER, "deepseek/deepseek-v3.2", api_key="sk-x")
+        assert str(model.openai_api_base) == _OPENROUTER_BASE_URL
+
+    def test_model_id_and_key_passed_through(self) -> None:
+        model = create_direct_model(Provider.DEEPSEEK, "deepseek-reasoner", api_key="sk-explicit")
+        assert model.model_name == "deepseek-reasoner"
+        assert model.openai_api_key.get_secret_value() == "sk-explicit"
+
+    def test_resolves_key_from_provider_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("SILKROUTE_DEEPSEEK_API_KEY", "sk-from-env")
+        model = create_direct_model(Provider.DEEPSEEK, "deepseek-chat")
+        assert model.openai_api_key.get_secret_value() == "sk-from-env"
+
+    def test_raises_when_no_key_available(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.delenv("SILKROUTE_QWEN_API_KEY", raising=False)
+        with pytest.raises(ValueError, match="No .*API key"):
+            create_direct_model(Provider.QWEN, "qwen-plus")
+
+    def test_unsupported_provider_raises(self) -> None:
+        with pytest.raises(ValueError, match="no direct.*endpoint"):
+            create_direct_model(Provider.OLLAMA, "qwen3:30b-a3b", api_key="sk-x")
+
+    def test_only_openrouter_gets_referer_headers(self) -> None:
+        deepseek = create_direct_model(Provider.DEEPSEEK, "deepseek-chat", api_key="sk-x")
+        assert "HTTP-Referer" not in (deepseek.default_headers or {})
+        openrouter = create_direct_model(
+            Provider.OPENROUTER, "deepseek/deepseek-v3.2", api_key="sk-x"
+        )
+        assert openrouter.default_headers["HTTP-Referer"] == _DEFAULT_HEADERS["HTTP-Referer"]
+
+    def test_provider_base_urls_cover_direct_vendors(self) -> None:
+        for provider in (Provider.DEEPSEEK, Provider.GLM, Provider.QWEN, Provider.OPENROUTER):
+            assert provider in _PROVIDER_BASE_URLS
 
 
 class TestResolveApiKey:

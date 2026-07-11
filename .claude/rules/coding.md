@@ -5,7 +5,7 @@
 - Dashboard: `dashboard/` — Next.js 15 App Router
 
 ## Hard Constraints
-- **No OpenAI** — Chinese LLMs only via OpenRouter (DeepSeek, Qwen, GLM, Kimi)
+- **No OpenAI** — Chinese LLMs only (DeepSeek, Qwen, GLM, Kimi); direct vendor APIs when keys are configured, OpenRouter as fallback
 - **No blanket-ignore `.claude/`** in .gitignore — only ephemeral observer files
 
 ## Model Routing
