@@ -31,3 +31,6 @@ silkroute_pgdata/
 silkroute_redis/
 .vercel
 .env*.local
+
+# Git worktrees
+.worktrees/
