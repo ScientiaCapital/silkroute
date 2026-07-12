@@ -65,8 +65,8 @@ def create_direct_model(
     Args:
         provider: Which vendor to route to (DeepSeek, GLM, Qwen, or OpenRouter).
         model_id: The model name the vendor's endpoint expects. For direct
-            vendors this is the *native* name (e.g. "deepseek-chat"), not the
-            OpenRouter slug — see ``providers.models.DIRECT_MODEL_NAMES``.
+            vendors this is the *native* name (e.g. "deepseek-v4-flash"), not
+            the OpenRouter slug — see ``providers.models.DIRECT_MODEL_NAMES``.
         api_key: Explicit API key. Falls back to the provider's env vars.
         temperature: Sampling temperature. 0.0 for deterministic output.
         max_tokens: Maximum tokens in the response.

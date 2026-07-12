@@ -88,7 +88,7 @@ def get_litellm_model_string(model: ModelSpec) -> str:
     1. LiteLLM proxy mode → ``silkroute-*`` alias (routes via localhost:4000)
     2. Ollama models → model_id as-is
     3. Direct API key + native transport → ``<vendor>/<native-name>``
-       (e.g. ``deepseek/deepseek-chat``, ``dashscope/qwen-plus``, ``zai/glm-4.7``)
+       (e.g. ``deepseek/deepseek-v4-flash``, ``dashscope/qwen-plus``, ``zai/glm-4.7``)
     4. Otherwise → ``openrouter/`` prefix
     """
     # Proxy mode: use silkroute-* aliases from litellm_config.yaml

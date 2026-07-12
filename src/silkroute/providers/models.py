@@ -70,6 +70,12 @@ class ModelSpec:
     rate_limit_rpm: int = 0  # 0 = no known limit
     recommended_for: tuple[str, ...] = field(default_factory=tuple)
 
+    # Local-hardware metadata (Ollama models only; 0.0 = not applicable/cloud model).
+    # Approximate total unified memory needed to run comfortably (weights + context
+    # + OS overhead), not just the raw Q4 download size. Used to pick models that
+    # actually fit a given machine — e.g. an 8GB M1 vs. a 24GB M4.
+    min_ram_gb: float = 0.0
+
     @property
     def cost_per_1k_input(self) -> float:
         """Cost per 1,000 input tokens."""
@@ -326,6 +332,7 @@ QWEN3_30B_LOCAL = ModelSpec(
     is_moe=True,
     is_free=True,
     recommended_for=("local_simple_tasks", "offline_coding", "privacy_sensitive"),
+    min_ram_gb=24.0,  # MoE stores all experts in RAM even though only 3B are active/token
 )
 
 GLM_47_9B_LOCAL = ModelSpec(
@@ -343,6 +350,25 @@ GLM_47_9B_LOCAL = ModelSpec(
     is_moe=False,
     is_free=True,
     recommended_for=("local_lightweight", "summaries", "drafts"),
+    min_ram_gb=8.0,  # ~5.5-6GB Q4 weights; the only pre-existing local model that fits an 8GB M1
+)
+
+QWEN2_5_7B_LOCAL = ModelSpec(
+    model_id="ollama/qwen2.5:7b",
+    name="Qwen2.5 7B (Local)",
+    provider=Provider.OLLAMA,
+    tier=ModelTier.FREE,
+    input_cost_per_m=0.0,
+    output_cost_per_m=0.0,
+    context_window=32_768,
+    max_output_tokens=8_192,
+    capabilities=(Capability.TOOL_CALLING, Capability.AGENTIC),
+    total_params_b=7.0,
+    active_params_b=7.0,
+    is_moe=False,
+    is_free=True,
+    recommended_for=("local_lightweight", "offline_device_control", "privacy_sensitive"),
+    min_ram_gb=8.0,  # Verified 2026-07-12 via ollama.com/library/qwen2.5 — 4.7GB Q4 download
 )
 
 QWEN2_5_14B_LOCAL = ModelSpec(
@@ -360,6 +386,7 @@ QWEN2_5_14B_LOCAL = ModelSpec(
     is_moe=False,
     is_free=True,
     recommended_for=("local_agentic_tools", "offline_device_control", "privacy_sensitive"),
+    min_ram_gb=16.0,  # Does NOT fit an 8GB M1 — needs the 24GB M4 or bigger
 )
 
 QWEN2_5_32B_LOCAL = ModelSpec(
@@ -377,15 +404,15 @@ QWEN2_5_32B_LOCAL = ModelSpec(
     is_moe=False,
     is_free=True,
     recommended_for=("local_agentic_tools", "offline_device_control", "privacy_sensitive"),
+    min_ram_gb=24.0,  # Does NOT fit an 8GB M1 — needs the 24GB M4 or bigger
 )
 
-# UNVERIFIED — best-guess Ollama library tag. No internet access was available
-# to confirm this exact tag exists in the Ollama library as of 2026-07-12.
-# Run "ollama search deepseek" or check https://ollama.com/library before
-# "ollama pull"-ing this — fix the model_id here if the real tag differs.
+# Verified 2026-07-12 against https://ollama.com/library/deepseek-r1 — real tag,
+# "DeepSeek-R1-Distill-Qwen-14B", 9.0GB, 128K context (context_window below is
+# left at the repo's existing conservative default).
 DEEPSEEK_R1_14B_LOCAL = ModelSpec(
     model_id="ollama/deepseek-r1:14b",
-    name="DeepSeek R1 14B (Local, UNVERIFIED tag)",
+    name="DeepSeek R1 14B (Local)",
     provider=Provider.OLLAMA,
     tier=ModelTier.FREE,
     input_cost_per_m=0.0,
@@ -398,28 +425,15 @@ DEEPSEEK_R1_14B_LOCAL = ModelSpec(
     is_moe=False,
     is_free=True,
     recommended_for=("local_agentic_tools", "offline_device_control", "privacy_sensitive"),
+    min_ram_gb=16.0,  # 9GB Q4 file alone exceeds an 8GB M1's total unified memory
 )
 
-# UNVERIFIED — same caveat as above. GLM_47_9B_LOCAL (glm4:9b) is a known-older
-# tag; this is a best-guess at a current-generation local GLM tag, added
-# alongside (not replacing) the older one. Verify and delete whichever is wrong
-# once checked against the live Ollama library.
-GLM_CURRENT_LOCAL = ModelSpec(
-    model_id="ollama/glm4.6:9b",
-    name="GLM-4.6 9B (Local, UNVERIFIED tag)",
-    provider=Provider.OLLAMA,
-    tier=ModelTier.FREE,
-    input_cost_per_m=0.0,
-    output_cost_per_m=0.0,
-    context_window=128_000,
-    max_output_tokens=4_096,
-    capabilities=(Capability.TOOL_CALLING, Capability.CREATIVE),
-    total_params_b=9.0,
-    active_params_b=9.0,
-    is_moe=False,
-    is_free=True,
-    recommended_for=("local_lightweight", "summaries", "drafts"),
-)
+# GLM_CURRENT_LOCAL ("ollama/glm4.6:9b") removed 2026-07-12 — verified against
+# ollama.com and independent sources that GLM-4.6 is a ~355B-parameter MoE model
+# (32B active) with no 9B variant; no such tag exists, and none of Zhipu's other
+# current-gen releases (GLM-4.5-Air, 106B/12B active) come close to a genuinely
+# lightweight 9B footprint either. GLM_47_9B_LOCAL (glm4:9b) remains the only
+# local GLM option until a real small current-gen tag exists.
 
 # ============================================================================
 # MODEL REGISTRY
@@ -443,10 +457,10 @@ ALL_MODELS: dict[str, ModelSpec] = {
     # Local
     QWEN3_30B_LOCAL.model_id: QWEN3_30B_LOCAL,
     GLM_47_9B_LOCAL.model_id: GLM_47_9B_LOCAL,
+    QWEN2_5_7B_LOCAL.model_id: QWEN2_5_7B_LOCAL,
     QWEN2_5_14B_LOCAL.model_id: QWEN2_5_14B_LOCAL,
     QWEN2_5_32B_LOCAL.model_id: QWEN2_5_32B_LOCAL,
     DEEPSEEK_R1_14B_LOCAL.model_id: DEEPSEEK_R1_14B_LOCAL,
-    GLM_CURRENT_LOCAL.model_id: GLM_CURRENT_LOCAL,
 }
 
 MODELS_BY_TIER: dict[ModelTier, list[ModelSpec]] = {
@@ -456,10 +470,10 @@ MODELS_BY_TIER: dict[ModelTier, list[ModelSpec]] = {
         GLM_45_AIR_FREE,
         QWEN3_30B_LOCAL,
         GLM_47_9B_LOCAL,
+        QWEN2_5_7B_LOCAL,
         QWEN2_5_14B_LOCAL,
         QWEN2_5_32B_LOCAL,
         DEEPSEEK_R1_14B_LOCAL,
-        GLM_CURRENT_LOCAL,
     ],
     ModelTier.STANDARD: [
         DEEPSEEK_V3_2,
@@ -506,18 +520,25 @@ DEFAULT_ROUTING: dict[ModelTier, list[str]] = {
 # model name, used when a direct provider API key is configured and the router
 # routes through litellm's native vendor transport (deepseek/, dashscope/, zai/)
 # instead of OpenRouter. The native APIs use different model names than the
-# OpenRouter slugs (e.g. OpenRouter "deepseek/deepseek-v3.2" is "deepseek-chat"
+# OpenRouter slugs (e.g. OpenRouter "deepseek/deepseek-v3.2" is "deepseek-v4-flash"
 # on api.deepseek.com).
 #
-# WARNING: These native names are UNVERIFIED — no direct DeepSeek/DashScope/Zhipu
-# API keys or docs are available yet. Confirm each against the vendor's own API
-# reference before relying on direct routing in production. Models absent from
-# this map (e.g. Moonshot/Kimi) have no native transport and stay on OpenRouter.
+# Verified 2026-07-12 against vendor docs/announcements. Qwen (DashScope) and
+# GLM (Zhipu/bigmodel.cn) names below are confirmed live model names. DeepSeek
+# names were updated to the new deepseek-v4-* naming: the legacy "deepseek-chat"
+# / "deepseek-reasoner" names are being fully retired 2026-07-24 15:59 UTC — see
+# https://api-docs.deepseek.com/news/news260424/. During the migration window
+# they alias to deepseek-v4-flash's non-thinking/thinking modes respectively,
+# which meant "deepseek/deepseek-r1-0528" (a PREMIUM-tier reasoning model) was
+# silently downgraded to Flash-tier reasoning via the "deepseek-reasoner" alias
+# instead of the true Pro-tier successor — fixed below by pointing it straight
+# at "deepseek-v4-pro". Models absent from this map (e.g. Moonshot/Kimi) have no
+# native transport and stay on OpenRouter.
 DIRECT_MODEL_NAMES: dict[str, str] = {
     # DeepSeek (api.deepseek.com) — litellm "deepseek/" provider
-    "deepseek/deepseek-v3.2": "deepseek-chat",
-    "deepseek/deepseek-r1-0528": "deepseek-reasoner",
-    "deepseek/deepseek-r1-0528:free": "deepseek-reasoner",
+    "deepseek/deepseek-v3.2": "deepseek-v4-flash",
+    "deepseek/deepseek-r1-0528": "deepseek-v4-pro",
+    "deepseek/deepseek-r1-0528:free": "deepseek-v4-flash",
     # Qwen (dashscope.aliyuncs.com) — litellm "dashscope/" provider
     "qwen/qwen3-235b-a22b-2507": "qwen-plus",
     "qwen/qwen3-30b-a3b": "qwen-turbo",

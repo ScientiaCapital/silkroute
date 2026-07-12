@@ -452,8 +452,8 @@ def _extract_cost(
         cost = litellm.completion_cost(completion_response=response)
         if cost and cost > 0:
             return cost
-    except Exception:
-        pass
+    except Exception as e:
+        log.debug("cost_extraction_fallback_1_failed", error=str(e))
 
     # Fallback 2: _hidden_params
     try:
@@ -461,8 +461,8 @@ def _extract_cost(
         cost = hidden.get("response_cost")
         if cost and cost > 0:
             return cost
-    except Exception:
-        pass
+    except Exception as e:
+        log.debug("cost_extraction_fallback_2_failed", error=str(e))
 
     # Fallback 3: Our own estimate
     return estimate_cost(model, input_tokens, output_tokens)

@@ -203,7 +203,7 @@ class TestRunAgent:
 
         _, kwargs = mock_litellm.acompletion.call_args
         assert kwargs["api_key"] == "sk-deepseek-direct"
-        assert kwargs["model"] == "deepseek/deepseek-chat"
+        assert kwargs["model"] == "deepseek/deepseek-v4-flash"
 
     @pytest.mark.asyncio
     async def test_openrouter_key_threaded_when_no_direct_key(self, monkeypatch):

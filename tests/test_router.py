@@ -61,9 +61,9 @@ class TestGetLitellmModelString:
         from silkroute.providers.models import DEEPSEEK_V3_2
         with patch.dict(os.environ, {"SILKROUTE_DEEPSEEK_API_KEY": "sk-test-123"}):
             result = get_litellm_model_string(DEEPSEEK_V3_2)
-            # litellm's native deepseek/ transport expects "deepseek-chat",
+            # litellm's native deepseek/ transport expects "deepseek-v4-flash",
             # NOT the OpenRouter slug "deepseek/deepseek-v3.2".
-            assert result == "deepseek/deepseek-chat"
+            assert result == "deepseek/deepseek-v4-flash"
             assert not result.startswith("openrouter/")
 
     def test_qwen_direct_key_uses_dashscope_transport(self):
@@ -82,11 +82,11 @@ class TestGetLitellmModelString:
             assert result == "zai/glm-4.7"
             assert not result.startswith("openrouter/")
 
-    def test_deepseek_r1_direct_key_maps_to_reasoner(self):
+    def test_deepseek_r1_direct_key_maps_to_pro(self):
         from silkroute.providers.models import DEEPSEEK_R1
         with patch.dict(os.environ, {"SILKROUTE_DEEPSEEK_API_KEY": "sk-test-123"}):
             result = get_litellm_model_string(DEEPSEEK_R1)
-            assert result == "deepseek/deepseek-reasoner"
+            assert result == "deepseek/deepseek-v4-pro"
 
     def test_direct_key_for_wrong_provider_falls_back_to_openrouter(self):
         # A DeepSeek key set, but selecting a GLM model → GLM has no direct
