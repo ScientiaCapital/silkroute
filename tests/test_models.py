@@ -12,10 +12,10 @@ from silkroute.providers.models import (
 
 class TestModelRegistry:
     def test_total_model_count(self):
-        assert len(ALL_MODELS) == 15
+        assert len(ALL_MODELS) == 17
 
     def test_tier_distribution(self):
-        assert len(MODELS_BY_TIER[ModelTier.FREE]) == 7  # 3 API + 4 local
+        assert len(MODELS_BY_TIER[ModelTier.FREE]) == 9  # 3 API + 6 local
         assert len(MODELS_BY_TIER[ModelTier.STANDARD]) == 4
         assert len(MODELS_BY_TIER[ModelTier.PREMIUM]) == 4
 

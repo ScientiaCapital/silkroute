@@ -496,3 +496,94 @@ class TestRunAgentWithDB:
         # Agent should still complete successfully
         assert session.status == SessionStatus.COMPLETED
         assert session.iteration_count == 1
+
+
+class TestFinopsReporting:
+    """Finops usage reporting must fire regardless of Postgres availability."""
+
+    @pytest.mark.asyncio
+    async def test_finops_report_fires_with_pool_none(self) -> None:
+        """persist_sessions=False (the _disable_db_persistence default) means
+        pool is None throughout — finops reporting must still be scheduled."""
+        mock_response = _make_completion_response("Done.")
+
+        with (
+            patch("silkroute.agent.loop.litellm") as mock_litellm,
+            patch(
+                "silkroute.integrations.finops_client.report_usage", new_callable=AsyncMock
+            ) as mock_report,
+        ):
+            mock_litellm.acompletion = AsyncMock(return_value=mock_response)
+            mock_litellm.completion_cost.return_value = 0.0001
+            mock_litellm.suppress_debug_info = True
+
+            session = await run_agent("Quick task", budget_limit_usd=1.0, max_iterations=5)
+
+        assert session.status == SessionStatus.COMPLETED
+        mock_report.assert_awaited_once()
+        _, kwargs = mock_report.call_args
+        assert kwargs["input_tokens"] == 100
+        assert kwargs["output_tokens"] == 50
+
+    @pytest.mark.asyncio
+    async def test_finops_report_fires_with_pool_available(self) -> None:
+        """Same assertion but with Postgres persistence also enabled."""
+        mock_response = _make_completion_response("Done.")
+        mock_pool = AsyncMock()
+        mock_db_sessions = AsyncMock()
+        mock_db_projects = AsyncMock()
+        mock_db_projects.get_monthly_spend = AsyncMock(return_value=0.0)
+        mock_db_projects.get_project_budget = AsyncMock(return_value=200.0)
+
+        with (
+            patch("silkroute.agent.loop.litellm") as mock_litellm,
+            patch("silkroute.agent.loop.AgentConfig") as mock_cfg,
+            patch(
+                "silkroute.db.pool.asyncpg.create_pool",
+                new_callable=AsyncMock,
+                return_value=mock_pool,
+            ),
+            patch("silkroute.db.repositories.sessions.create_session", mock_db_sessions.create_session),
+            patch("silkroute.db.repositories.sessions.update_session", mock_db_sessions.update_session),
+            patch("silkroute.db.repositories.sessions.close_session", mock_db_sessions.close_session),
+            patch("silkroute.db.repositories.projects.get_monthly_spend", mock_db_projects.get_monthly_spend),
+            patch("silkroute.db.repositories.projects.get_project_budget", mock_db_projects.get_project_budget),
+            patch("silkroute.db.repositories.cost_logs.insert_cost_log", new_callable=AsyncMock),
+            patch(
+                "silkroute.integrations.finops_client.report_usage", new_callable=AsyncMock
+            ) as mock_report,
+        ):
+            mock_cfg.return_value.persist_sessions = True
+            mock_litellm.acompletion = AsyncMock(return_value=mock_response)
+            mock_litellm.completion_cost.return_value = 0.0001
+            mock_litellm.suppress_debug_info = True
+
+            import silkroute.db.pool as pool_mod
+            pool_mod._pool = None
+
+            session = await run_agent("Quick task", budget_limit_usd=1.0, max_iterations=5)
+            pool_mod._pool = None
+
+        assert session.status == SessionStatus.COMPLETED
+        mock_report.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_finops_report_exception_does_not_break_loop(self) -> None:
+        """An exception raised while scheduling the finops report must not
+        surface to the caller — the agent loop must complete normally."""
+        mock_response = _make_completion_response("Done.")
+
+        with (
+            patch("silkroute.agent.loop.litellm") as mock_litellm,
+            patch(
+                "silkroute.config.settings.FinopsConfig",
+                side_effect=RuntimeError("settings blew up"),
+            ),
+        ):
+            mock_litellm.acompletion = AsyncMock(return_value=mock_response)
+            mock_litellm.completion_cost.return_value = 0.0001
+            mock_litellm.suppress_debug_info = True
+
+            session = await run_agent("Quick task", budget_limit_usd=1.0, max_iterations=5)
+
+        assert session.status == SessionStatus.COMPLETED

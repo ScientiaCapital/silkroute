@@ -89,6 +89,10 @@ calls), talking MCP-standard tool calling (the same protocol Claude Desktop and
 Cursor use) — model, orchestrator, and device server are all independently
 swappable.
 
+For a full walkthrough — which Ollama models to pull, running the demo with each, and what
+shows up on the model-finops cost dashboard once telemetry reporting is enabled — see
+[`docs/av-demo-guide.md`](docs/av-demo-guide.md).
+
 ## Hardware Deployment Tiers
 
 | Tier | Hardware | Local Models | Monthly Cost |

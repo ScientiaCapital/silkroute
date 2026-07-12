@@ -379,6 +379,48 @@ QWEN2_5_32B_LOCAL = ModelSpec(
     recommended_for=("local_agentic_tools", "offline_device_control", "privacy_sensitive"),
 )
 
+# UNVERIFIED — best-guess Ollama library tag. No internet access was available
+# to confirm this exact tag exists in the Ollama library as of 2026-07-12.
+# Run "ollama search deepseek" or check https://ollama.com/library before
+# "ollama pull"-ing this — fix the model_id here if the real tag differs.
+DEEPSEEK_R1_14B_LOCAL = ModelSpec(
+    model_id="ollama/deepseek-r1:14b",
+    name="DeepSeek R1 14B (Local, UNVERIFIED tag)",
+    provider=Provider.OLLAMA,
+    tier=ModelTier.FREE,
+    input_cost_per_m=0.0,
+    output_cost_per_m=0.0,
+    context_window=32_768,
+    max_output_tokens=8_192,
+    capabilities=(Capability.REASONING, Capability.TOOL_CALLING),
+    total_params_b=14.0,
+    active_params_b=14.0,
+    is_moe=False,
+    is_free=True,
+    recommended_for=("local_agentic_tools", "offline_device_control", "privacy_sensitive"),
+)
+
+# UNVERIFIED — same caveat as above. GLM_47_9B_LOCAL (glm4:9b) is a known-older
+# tag; this is a best-guess at a current-generation local GLM tag, added
+# alongside (not replacing) the older one. Verify and delete whichever is wrong
+# once checked against the live Ollama library.
+GLM_CURRENT_LOCAL = ModelSpec(
+    model_id="ollama/glm4.6:9b",
+    name="GLM-4.6 9B (Local, UNVERIFIED tag)",
+    provider=Provider.OLLAMA,
+    tier=ModelTier.FREE,
+    input_cost_per_m=0.0,
+    output_cost_per_m=0.0,
+    context_window=128_000,
+    max_output_tokens=4_096,
+    capabilities=(Capability.TOOL_CALLING, Capability.CREATIVE),
+    total_params_b=9.0,
+    active_params_b=9.0,
+    is_moe=False,
+    is_free=True,
+    recommended_for=("local_lightweight", "summaries", "drafts"),
+)
+
 # ============================================================================
 # MODEL REGISTRY
 # ============================================================================
@@ -403,6 +445,8 @@ ALL_MODELS: dict[str, ModelSpec] = {
     GLM_47_9B_LOCAL.model_id: GLM_47_9B_LOCAL,
     QWEN2_5_14B_LOCAL.model_id: QWEN2_5_14B_LOCAL,
     QWEN2_5_32B_LOCAL.model_id: QWEN2_5_32B_LOCAL,
+    DEEPSEEK_R1_14B_LOCAL.model_id: DEEPSEEK_R1_14B_LOCAL,
+    GLM_CURRENT_LOCAL.model_id: GLM_CURRENT_LOCAL,
 }
 
 MODELS_BY_TIER: dict[ModelTier, list[ModelSpec]] = {
@@ -414,6 +458,8 @@ MODELS_BY_TIER: dict[ModelTier, list[ModelSpec]] = {
         GLM_47_9B_LOCAL,
         QWEN2_5_14B_LOCAL,
         QWEN2_5_32B_LOCAL,
+        DEEPSEEK_R1_14B_LOCAL,
+        GLM_CURRENT_LOCAL,
     ],
     ModelTier.STANDARD: [
         DEEPSEEK_V3_2,

@@ -513,8 +513,37 @@ def _schedule_db_writes(
     """Fire-and-forget DB writes for the current iteration.
 
     Appends tasks to *pending* so they can be awaited before returning.
-    Includes session update, cost log, and tool audit log.
+    Includes session update, cost log, tool audit log, and (independent of
+    Postgres availability) an external finops usage report.
     """
+    # Scheduled unconditionally — independent of `pool` — since the AV demo
+    # normally runs standalone via --mock-pearl without Postgres, and this
+    # must still fire in that exact scenario. Its own try/except plus
+    # FinopsConfig.enabled guard the no-op/failure paths.
+    try:
+        # FinopsConfig() directly, not SilkRouteSettings().finops — the root
+        # aggregator's model_validator requires an LLM provider to be
+        # configured, which is unrelated to finops reporting and would
+        # silently break this in any env without one configured.
+        from silkroute.config.settings import FinopsConfig
+        from silkroute.integrations.finops_client import report_usage
+
+        finops_cfg = FinopsConfig()
+        pending.append(asyncio.create_task(report_usage(
+            finops_cfg,
+            provider=model.provider.value,
+            model=model.model_id,
+            input_tokens=iteration.input_tokens,
+            output_tokens=iteration.output_tokens,
+            cost_usd=iteration.cost_usd,
+            task_type=session.task[:100],
+            session_id=session.id,
+            project_id=session.project_id,
+            latency_ms=iteration.latency_ms,
+        )))
+    except Exception as exc:
+        log.warning("finops_report_schedule_failed", error=str(exc))
+
     if pool is None:
         return
     try:

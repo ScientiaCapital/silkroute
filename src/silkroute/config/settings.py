@@ -301,6 +301,30 @@ class MCPConfig(BaseSettings):
     )
 
 
+class FinopsConfig(BaseSettings):
+    """model-finops telemetry reporting — fire-and-forget usage forwarding."""
+
+    model_config = SettingsConfigDict(env_prefix="SILKROUTE_FINOPS_")
+
+    enabled: bool = Field(
+        default=False,
+        description="Report each iteration's usage to model-finops's telemetry endpoint",
+    )
+    base_url: str = Field(
+        default="http://localhost:8000",
+        description="model-finops base URL (its POST /api/telemetry/ingest endpoint)",
+    )
+    token: str = Field(
+        default="",
+        description="Shared secret bearer token — must match model-finops's FINOPS_INGEST_TOKEN",
+    )
+    timeout_seconds: float = Field(
+        default=3.0,
+        description="HTTP timeout for the fire-and-forget report — kept short since a slow or "
+        "unreachable finops endpoint must never stall the agent loop",
+    )
+
+
 class DatabaseConfig(BaseSettings):
     """PostgreSQL and Redis connection settings."""
 
@@ -333,6 +357,7 @@ class SilkRouteSettings(BaseSettings):
     agent: AgentConfig = Field(default_factory=AgentConfig)
     daemon: DaemonConfig = Field(default_factory=DaemonConfig)
     mcp: MCPConfig = Field(default_factory=MCPConfig)
+    finops: FinopsConfig = Field(default_factory=FinopsConfig)
     database: DatabaseConfig = Field(default_factory=DatabaseConfig)
     mantis: MantisConfig = Field(default_factory=MantisConfig)
     api: ApiConfig = Field(default_factory=ApiConfig)

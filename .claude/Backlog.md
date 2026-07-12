@@ -97,3 +97,4 @@ _Effort: XS (<1hr), S (1-3hr), M (3-8hr), L (1-2d)_
 
 ## 2026-07-12 — End Day findings
 - [ ] Verify DIRECT_MODEL_NAMES native model IDs + litellm prefixes (deepseek/, dashscope/, zai/) against vendor docs once API keys exist (best-guesses shipped 2026-07-11)
+- [ ] Verify new local Ollama tags `ollama/deepseek-r1:14b` and `ollama/glm4.6:9b` against `ollama search`/https://ollama.com/library before pulling — best-guesses added 2026-07-12 with no internet access to confirm they exist

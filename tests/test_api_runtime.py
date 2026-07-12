@@ -186,7 +186,7 @@ class TestModels:
         assert resp.status_code == 200
         data = resp.json()
         assert isinstance(data, list)
-        assert len(data) == 15  # 15 models in the registry
+        assert len(data) == 17  # 17 models in the registry
 
     def test_filter_by_tier(self, app: TestClient) -> None:
         resp = app.get("/models?tier=free")
