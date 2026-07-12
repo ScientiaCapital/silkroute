@@ -256,3 +256,32 @@ class TestDaemonScheduler:
 
         assert len(calls_received) == 1
         assert calls_received[0][0] is mock_db_pool
+
+    @pytest.mark.asyncio
+    async def test_budget_rollup_also_rolls_up_model_costs(self) -> None:
+        """_budget_rollup calls model_cost_snapshots.rollup_day too, with the same date."""
+        import datetime
+
+        config = _make_daemon_config()
+        queue = MagicMock(spec=TaskQueue)
+        mock_db_pool = AsyncMock()
+        scheduler = DaemonScheduler(config, queue, db_pool=mock_db_pool)
+
+        calls_received: list = []
+
+        async def fake_rollup(pool, date):  # noqa: ANN001
+            calls_received.append((pool, date))
+
+        import silkroute.db.repositories.model_cost_snapshots as model_snap_mod
+
+        original = model_snap_mod.rollup_day
+        model_snap_mod.rollup_day = fake_rollup
+        try:
+            await scheduler._budget_rollup()
+        finally:
+            model_snap_mod.rollup_day = original
+
+        assert len(calls_received) == 1
+        assert calls_received[0][0] is mock_db_pool
+        yesterday = datetime.date.today() - datetime.timedelta(days=1)
+        assert calls_received[0][1] == yesterday
