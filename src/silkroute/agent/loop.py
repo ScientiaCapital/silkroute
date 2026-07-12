@@ -26,10 +26,15 @@ from rich.rule import Rule
 from silkroute.agent.classifier import classify_task
 from silkroute.agent.cost_guard import check_budget, check_global_budget
 from silkroute.agent.prompts import build_system_prompt
-from silkroute.agent.router import get_litellm_model_string, resolve_api_key, select_model
+from silkroute.agent.router import (
+    get_litellm_model_string,
+    resolve_api_base,
+    resolve_api_key,
+    select_model,
+)
 from silkroute.agent.session import AgentSession, Iteration, SessionStatus, ToolCall
 from silkroute.agent.tools import create_default_registry, parse_tool_arguments
-from silkroute.config.settings import AgentConfig, BudgetConfig, ModelTier
+from silkroute.config.settings import AgentConfig, BudgetConfig, MCPConfig, ModelTier
 from silkroute.providers.models import ModelSpec, estimate_cost
 
 log = structlog.get_logger()
@@ -168,6 +173,30 @@ async def run_agent(
 
     # Step 4: Set up tools and system prompt (sandbox shell to workspace)
     registry = create_default_registry(workspace_dir=workspace_dir)
+
+    # MCP bridge (optional — non-fatal if the server or dependency is unavailable)
+    mcp_stack = None
+    mcp_config = MCPConfig()
+    if mcp_config.epiphan_enabled:
+        from silkroute.mcp_bridge.client import connect_mcp_server
+
+        subprocess_env = {
+            k: v
+            for k, v in {
+                "PEARL_DEVICES": mcp_config.epiphan_pearl_devices,
+                "PEARL_USERNAME": mcp_config.epiphan_pearl_username,
+                "PEARL_PASSWORD": mcp_config.epiphan_pearl_password,
+            }.items()
+            if v
+        }
+        mcp_stack = await connect_mcp_server(
+            registry,
+            command=mcp_config.epiphan_command,
+            args=mcp_config.epiphan_args,
+            env=subprocess_env,
+            tool_allowlist=mcp_config.epiphan_tool_allowlist or None,
+        )
+
     tools = registry.to_openai_tools()
 
     system_prompt = build_system_prompt(
@@ -188,6 +217,7 @@ async def run_agent(
     # transports look for their own env var names (DEEPSEEK_API_KEY, etc.) which
     # we never set — passing api_key= directly is what makes direct routing work.
     api_key = resolve_api_key(model)
+    api_base = resolve_api_base(model)
 
     # Suppress litellm's verbose logging
     litellm.suppress_debug_info = True
@@ -241,6 +271,7 @@ async def run_agent(
                 tools=tools,
                 tool_choice="auto",
                 api_key=api_key,
+                base_url=api_base,
             )
         except Exception as e:
             log.error("llm_call_failed", iteration=i, error=str(e), exc_info=True)
@@ -354,6 +385,10 @@ async def run_agent(
         session.complete(SessionStatus.TIMEOUT)
         if not daemon_mode:
             console.print(f"\n  [yellow]Max iterations ({max_iterations}) reached.[/yellow]")
+
+    # Close the MCP bridge, if one was opened
+    if mcp_stack is not None:
+        await mcp_stack.aclose()
 
     # Flush pending DB writes and close session
     if pending_db_tasks:

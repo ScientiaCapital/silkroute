@@ -251,6 +251,56 @@ class ApiConfig(BaseSettings):
     )
 
 
+class MCPConfig(BaseSettings):
+    """MCP client bridge configuration — connects the agent to an external MCP server."""
+
+    model_config = SettingsConfigDict(env_prefix="SILKROUTE_MCP_")
+
+    epiphan_enabled: bool = Field(
+        default=False,
+        description="Enable the MCP bridge to epiphan-mcp-server",
+    )
+    epiphan_command: str = Field(
+        default="python",
+        description=(
+            "Executable used to launch epiphan-mcp-server. Must be a Python "
+            "interpreter with epiphan_mcp installed — usually the absolute path "
+            "to that repo's own venv (e.g. "
+            "/path/to/epiphan-mcp-server/.venv/bin/python), not a bare 'python' "
+            "resolved from PATH, since it lives in a separate venv from silkroute."
+        ),
+    )
+    epiphan_args: list[str] = Field(
+        default_factory=lambda: ["-m", "epiphan_mcp"],
+        description="Args passed to epiphan_command to start the server",
+    )
+    epiphan_pearl_devices: str = Field(
+        default="", description="PEARL_DEVICES env var passed to the epiphan-mcp-server subprocess"
+    )
+    epiphan_pearl_username: str = Field(
+        default="", description="PEARL_USERNAME env var passed to the subprocess"
+    )
+    epiphan_pearl_password: str = Field(
+        default="", description="PEARL_PASSWORD env var passed to the subprocess"
+    )
+    epiphan_tool_allowlist: list[str] = Field(
+        default_factory=lambda: [
+            "get_device_status",
+            "list_devices",
+            "get_recording_status",
+            "list_recorders",
+            "get_all_recorder_status",
+            "get_system_info",
+            "get_fleet_status",
+        ],
+        description=(
+            "Subset of epiphan-mcp-server's ~115 tools to register — keeps a "
+            "small local model from drowning in tool schemas. Empty list means "
+            "register everything the server exposes."
+        ),
+    )
+
+
 class DatabaseConfig(BaseSettings):
     """PostgreSQL and Redis connection settings."""
 
@@ -282,6 +332,7 @@ class SilkRouteSettings(BaseSettings):
     budget: BudgetConfig = Field(default_factory=BudgetConfig)
     agent: AgentConfig = Field(default_factory=AgentConfig)
     daemon: DaemonConfig = Field(default_factory=DaemonConfig)
+    mcp: MCPConfig = Field(default_factory=MCPConfig)
     database: DatabaseConfig = Field(default_factory=DatabaseConfig)
     mantis: MantisConfig = Field(default_factory=MantisConfig)
     api: ApiConfig = Field(default_factory=ApiConfig)

@@ -134,6 +134,19 @@ def _direct_litellm_string(model: ModelSpec) -> str | None:
     return f"{prefix}/{native_name}"
 
 
+def resolve_api_base(model: ModelSpec) -> str | None:
+    """Resolve the ``api_base`` to pass to ``litellm.acompletion(base_url=...)``.
+
+    Only Ollama models need an explicit base — every other provider either
+    goes through the LiteLLM proxy or a vendor transport that resolves its own
+    endpoint. Without this, litellm silently falls back to its own hardcoded
+    ``localhost:11434`` default and ``SILKROUTE_OLLAMA_BASE_URL`` has no effect.
+    """
+    if model.provider == Provider.OLLAMA:
+        return ProviderConfig().ollama_base_url
+    return None
+
+
 def resolve_api_key(model: ModelSpec) -> str | None:
     """Resolve the API key to pass to ``litellm.acompletion(api_key=...)``.
 

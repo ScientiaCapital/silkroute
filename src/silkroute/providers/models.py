@@ -345,6 +345,40 @@ GLM_47_9B_LOCAL = ModelSpec(
     recommended_for=("local_lightweight", "summaries", "drafts"),
 )
 
+QWEN2_5_14B_LOCAL = ModelSpec(
+    model_id="ollama/qwen2.5:14b",
+    name="Qwen2.5 14B (Local)",
+    provider=Provider.OLLAMA,
+    tier=ModelTier.FREE,
+    input_cost_per_m=0.0,
+    output_cost_per_m=0.0,
+    context_window=32_768,
+    max_output_tokens=8_192,
+    capabilities=(Capability.TOOL_CALLING, Capability.AGENTIC),
+    total_params_b=14.0,
+    active_params_b=14.0,
+    is_moe=False,
+    is_free=True,
+    recommended_for=("local_agentic_tools", "offline_device_control", "privacy_sensitive"),
+)
+
+QWEN2_5_32B_LOCAL = ModelSpec(
+    model_id="ollama/qwen2.5:32b",
+    name="Qwen2.5 32B (Local)",
+    provider=Provider.OLLAMA,
+    tier=ModelTier.FREE,
+    input_cost_per_m=0.0,
+    output_cost_per_m=0.0,
+    context_window=32_768,
+    max_output_tokens=8_192,
+    capabilities=(Capability.TOOL_CALLING, Capability.AGENTIC),
+    total_params_b=32.0,
+    active_params_b=32.0,
+    is_moe=False,
+    is_free=True,
+    recommended_for=("local_agentic_tools", "offline_device_control", "privacy_sensitive"),
+)
+
 # ============================================================================
 # MODEL REGISTRY
 # ============================================================================
@@ -367,6 +401,8 @@ ALL_MODELS: dict[str, ModelSpec] = {
     # Local
     QWEN3_30B_LOCAL.model_id: QWEN3_30B_LOCAL,
     GLM_47_9B_LOCAL.model_id: GLM_47_9B_LOCAL,
+    QWEN2_5_14B_LOCAL.model_id: QWEN2_5_14B_LOCAL,
+    QWEN2_5_32B_LOCAL.model_id: QWEN2_5_32B_LOCAL,
 }
 
 MODELS_BY_TIER: dict[ModelTier, list[ModelSpec]] = {
@@ -376,6 +412,8 @@ MODELS_BY_TIER: dict[ModelTier, list[ModelSpec]] = {
         GLM_45_AIR_FREE,
         QWEN3_30B_LOCAL,
         GLM_47_9B_LOCAL,
+        QWEN2_5_14B_LOCAL,
+        QWEN2_5_32B_LOCAL,
     ],
     ModelTier.STANDARD: [
         DEEPSEEK_V3_2,

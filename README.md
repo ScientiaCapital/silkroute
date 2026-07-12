@@ -28,7 +28,7 @@ SilkRoute doesn't just support Chinese models — it's *optimized* for them. Sys
 - **Per-Project Budget Governance** — Hard monthly caps per project. Daily pacing prevents overnight cost spikes. Alerts at 50%, 80%, 100%. Circuit breaker kills the agent at budget limit.
 - **Chinese-Model-First** — DeepSeek, Qwen, GLM, Kimi as primary providers. OpenRouter as unified gateway. Direct API support for lower latency.
 - **Hybrid Local + API** — Ollama support for Mac Studio (192GB) and NVIDIA Spark. Route to local models when available, API when not. Zero-cost inference for 80%+ of tasks.
-- **MCP Tool Integration** — GitHub (PR review, issue triage), Supabase (database), Brave Search, shell execution. Extensible via standard MCP protocol.
+- **MCP Client Bridge** — `src/silkroute/mcp_bridge` connects the agent to any MCP-compatible server over stdio and registers its tools alongside the built-ins. Demonstrated end-to-end against [epiphan-mcp-server](https://github.com/ScientiaCapital/epiphan-mcp-server) — see "Try the AV demo" below.
 - **24/7 Daemon Mode** — GitHub webhook listener, cron scheduler, heartbeat monitoring. Manages 70+ repos autonomously while you sleep.
 
 ## Quick Start
@@ -65,6 +65,30 @@ docker compose up -d
 silkroute run --project my-repo "Triage all open issues and label by priority"
 ```
 
+## Try the AV demo
+
+A self-hosted, open-weight LLM (Qwen2.5, served locally via Ollama) answers a
+plain-English AV question by calling [epiphan-mcp-server](https://github.com/ScientiaCapital/epiphan-mcp-server)'s
+tools directly over MCP — no cloud dependency anywhere in the loop.
+
+```bash
+ollama pull qwen2.5:14b   # once
+
+python demo/agent_ready_av_demo.py --mock-pearl
+# or, against a real fleet:
+python demo/agent_ready_av_demo.py --pearl-devices 192.168.1.100 \
+    --pearl-username admin --pearl-password ...
+```
+
+`--mock-pearl` starts a tiny stub Pearl API server (`demo/pearl_mock_server.py`)
+instead of hitting real hardware — useful for a fast, deterministic demo run.
+epiphan-mcp-server's source is never modified either way.
+
+What this proves: an open-weight model, fully self-hosted (no cloud inference
+calls), talking MCP-standard tool calling (the same protocol Claude Desktop and
+Cursor use) — model, orchestrator, and device server are all independently
+swappable.
+
 ## Hardware Deployment Tiers
 
 | Tier | Hardware | Local Models | Monthly Cost |
@@ -79,10 +103,10 @@ silkroute run --project my-repo "Triage all open issues and label by priority"
 ```
 silkroute run "task" → Agent Core → Task Classifier → LiteLLM Proxy → Chinese LLMs
                          ↓              ↓                  ↓
-                    MCP Tools     Budget Guard      DeepSeek / Qwen / GLM / Kimi
-                    (GitHub,      (per-project      (via OpenRouter or direct API)
-                     Supabase,     hard caps,
-                     Search)       alerts)
+                    Tools (built-in  Budget Guard      DeepSeek / Qwen / GLM / Kimi
+                    + MCP bridge)   (per-project       (via OpenRouter, direct API,
+                                     hard caps,          or local Ollama)
+                                     alerts)
 ```
 
 ## Cost Comparison
