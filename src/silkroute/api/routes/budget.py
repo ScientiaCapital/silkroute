@@ -20,6 +20,8 @@ from silkroute.api.models import (
     BudgetSnapshotItem,
     BudgetSnapshotListResponse,
     GlobalBudgetResponse,
+    ModelCostSnapshotItem,
+    ModelCostSnapshotListResponse,
     ProjectBudgetResponse,
 )
 from silkroute.config.settings import BudgetConfig
@@ -121,6 +123,48 @@ async def budget_snapshots(
         for row in rows
     ]
     return BudgetSnapshotListResponse(snapshots=items, count=len(items))
+
+
+@router.get("/models")
+async def budget_models(
+    project_id: str = Query(..., description="Project ID to fetch per-model costs for"),
+    start_date: datetime.date = Query(
+        default=datetime.date.today() - datetime.timedelta(days=30),
+        description="Inclusive start date (YYYY-MM-DD)",
+    ),
+    end_date: datetime.date = Query(
+        default=datetime.date.today(),
+        description="Inclusive end date (YYYY-MM-DD)",
+    ),
+    db_pool: asyncpg.Pool | None = Depends(get_db_pool),
+) -> ModelCostSnapshotListResponse:
+    """Get daily per-model cost breakdown for a project.
+
+    Fails open if Postgres is unavailable — returns an empty list.
+    """
+    if db_pool is None:
+        return ModelCostSnapshotListResponse(snapshots=[], count=0)
+
+    try:
+        from silkroute.db.repositories.model_cost_snapshots import get_snapshots
+
+        rows = await get_snapshots(db_pool, project_id, start_date, end_date)
+    except Exception:
+        return ModelCostSnapshotListResponse(snapshots=[], count=0)
+
+    items = [
+        ModelCostSnapshotItem(
+            project_id=str(row["project_id"]),
+            model_id=str(row["model_id"]),
+            provider=str(row["provider"]),
+            snapshot_date=str(row["snapshot_date"]),
+            total_cost_usd=float(row["total_cost_usd"]),
+            total_requests=int(row["total_requests"]),
+            total_tokens=int(row["total_tokens"]),
+        )
+        for row in rows
+    ]
+    return ModelCostSnapshotListResponse(snapshots=items, count=len(items))
 
 
 @router.get("/{project_id}")
