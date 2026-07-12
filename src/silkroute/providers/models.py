@@ -335,7 +335,7 @@ QWEN3_30B_LOCAL = ModelSpec(
     min_ram_gb=24.0,  # MoE stores all experts in RAM even though only 3B are active/token
 )
 
-GLM_47_9B_LOCAL = ModelSpec(
+GLM_4_9B_LOCAL = ModelSpec(
     model_id="ollama/glm4:9b",
     name="GLM-4 9B (Local)",
     provider=Provider.OLLAMA,
@@ -432,7 +432,7 @@ DEEPSEEK_R1_14B_LOCAL = ModelSpec(
 # ollama.com and independent sources that GLM-4.6 is a ~355B-parameter MoE model
 # (32B active) with no 9B variant; no such tag exists, and none of Zhipu's other
 # current-gen releases (GLM-4.5-Air, 106B/12B active) come close to a genuinely
-# lightweight 9B footprint either. GLM_47_9B_LOCAL (glm4:9b) remains the only
+# lightweight 9B footprint either. GLM_4_9B_LOCAL (glm4:9b) remains the only
 # local GLM option until a real small current-gen tag exists.
 
 # ============================================================================
@@ -456,7 +456,7 @@ ALL_MODELS: dict[str, ModelSpec] = {
     KIMI_K2.model_id: KIMI_K2,
     # Local
     QWEN3_30B_LOCAL.model_id: QWEN3_30B_LOCAL,
-    GLM_47_9B_LOCAL.model_id: GLM_47_9B_LOCAL,
+    GLM_4_9B_LOCAL.model_id: GLM_4_9B_LOCAL,
     QWEN2_5_7B_LOCAL.model_id: QWEN2_5_7B_LOCAL,
     QWEN2_5_14B_LOCAL.model_id: QWEN2_5_14B_LOCAL,
     QWEN2_5_32B_LOCAL.model_id: QWEN2_5_32B_LOCAL,
@@ -469,7 +469,7 @@ MODELS_BY_TIER: dict[ModelTier, list[ModelSpec]] = {
         DEEPSEEK_R1_FREE,
         GLM_45_AIR_FREE,
         QWEN3_30B_LOCAL,
-        GLM_47_9B_LOCAL,
+        GLM_4_9B_LOCAL,
         QWEN2_5_7B_LOCAL,
         QWEN2_5_14B_LOCAL,
         QWEN2_5_32B_LOCAL,
