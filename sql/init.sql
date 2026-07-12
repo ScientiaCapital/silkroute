@@ -89,7 +89,6 @@ CREATE TABLE IF NOT EXISTS model_cost_snapshots (
     UNIQUE(project_id, model_id, provider, snapshot_date)
 );
 
-CREATE INDEX IF NOT EXISTS idx_model_cost_snapshots_project ON model_cost_snapshots(project_id);
 CREATE INDEX IF NOT EXISTS idx_model_cost_snapshots_model ON model_cost_snapshots(model_id);
 
 -- ============================================================
