@@ -73,14 +73,17 @@ export default async function BudgetPage() {
 
   const modelCosts = await getModelCosts(budgets.map((b) => b.projectId));
 
-  // Aggregate across all projects/dates for a simple per-model total view
-  const byModel = new Map<string, { provider: string; cost: number; requests: number; tokens: number }>();
+  // Aggregate across all projects/dates, keyed on (model, provider) to match the
+  // backend's grouping grain — the same model_id can appear under multiple providers
+  // (e.g. direct vendor API vs. OpenRouter fallback).
+  const byModel = new Map<string, { modelId: string; provider: string; cost: number; requests: number; tokens: number }>();
   for (const row of modelCosts) {
-    const existing = byModel.get(row.model_id) ?? { provider: row.provider, cost: 0, requests: 0, tokens: 0 };
+    const key = `${row.model_id}::${row.provider}`;
+    const existing = byModel.get(key) ?? { modelId: row.model_id, provider: row.provider, cost: 0, requests: 0, tokens: 0 };
     existing.cost += row.total_cost_usd;
     existing.requests += row.total_requests;
     existing.tokens += row.total_tokens;
-    byModel.set(row.model_id, existing);
+    byModel.set(key, existing);
   }
   const modelRows = Array.from(byModel.entries()).sort((a, b) => b[1].cost - a[1].cost);
 
@@ -151,11 +154,11 @@ export default async function BudgetPage() {
               </tr>
             </thead>
             <tbody>
-              {modelRows.map(([modelId, row]) => (
-                <tr key={modelId} className="border-b border-neutral-800/50 hover:bg-neutral-800/30">
-                  <td className="p-4 font-medium font-mono text-sm">{modelId}</td>
+              {modelRows.map(([key, row]) => (
+                <tr key={key} className="border-b border-neutral-800/50 hover:bg-neutral-800/30">
+                  <td className="p-4 font-medium font-mono text-sm">{row.modelId}</td>
                   <td className="p-4 text-neutral-400 text-sm">{row.provider}</td>
-                  <td className="p-4 text-right font-mono text-sm">{row.requests}</td>
+                  <td className="p-4 text-right font-mono text-sm">{row.requests.toLocaleString()}</td>
                   <td className="p-4 text-right font-mono text-sm">{row.tokens.toLocaleString()}</td>
                   <td className="p-4 text-right font-mono text-sm">${row.cost.toFixed(4)}</td>
                 </tr>
