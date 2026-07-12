@@ -1,38 +1,69 @@
 # silkroute
 
-**Branch**: main | **Updated**: 2026-07-12
+**Branch**: feature/local-cost-dashboard | **Updated**: 2026-07-12
 
 ## Status
-Ran a full `/begin` cycle today: context sync, both observer audits (0 BLOCKERs), standup, and an approved 5-item sprint closing out yesterday's "Tomorrow" list. Model registry is now hardware-aware (`min_ram_gb` on every local Ollama model, split across the user's 8GB M1 and this 24GB M4 Epiphan laptop) and DeepSeek's native model names were migrated ahead of the 2026-07-24 `deepseek-chat`/`deepseek-reasoner` retirement — caught a real bug where the premium reasoning tier had silently collapsed onto Flash-tier reasoning via that alias. Ollama was installed on this machine and the AV demo (`agent_ready_av_demo.py --mock-pearl`) ran live end-to-end successfully. 928/928 tests passing, lint clean. Two commits from this work (`ec27f29`, `57f69a2`) are already pushed to `origin/main`.
+Built and verified end-to-end a fully local, zero-cloud-dependency cost/model dashboard,
+brainstormed and planned earlier today after the user raised a real requirement: for
+government/courts/military and privacy-conscious deployments, phoning home to any cloud SaaS
+(like model-finops's Supabase dependency) is disqualifying. Design doc committed to `main`
+at `3b022ea`; this branch (`feature/local-cost-dashboard`, in `.worktrees/local-cost-dashboard`)
+implements it via subagent-driven development — 6 tasks, each implemented, spec-reviewed, and
+code-quality-reviewed independently before the next started. All 6 done. 945/945 tests
+passing on this branch, `npm run build` clean, and the whole pipeline verified live against a
+real Postgres container + the AV demo + a real browser session.
 
 ## Done (This Session)
-- [x] Verified `deepseek-r1:14b` is a real Ollama tag; removed `GLM_CURRENT_LOCAL` (`glm4.6:9b`) — no such tag exists, GLM-4.6 is a ~355B MoE model with no 9B variant
-- [x] Fixed `DIRECT_MODEL_NAMES`: migrated DeepSeek to `deepseek-v4-flash`/`deepseek-v4-pro` ahead of the legacy-name retirement; fixed `deepseek-r1-0528` silently downgrading to Flash-tier reasoning via the shared "reasoner" alias
-- [x] Renamed `GLM_47_9B_LOCAL` → `GLM_4_9B_LOCAL` — `glm4:9b` is plain GLM-4 (2024), not GLM-4.7 as the old name implied; confirmed no real small current-gen GLM tag exists on the official Ollama library (uncommitted as of this write — small diff on top of the pushed commits)
-- [x] Added `ModelSpec.min_ram_gb` + tagged every local model after the user flagged their 8GB M1 + this 24GB M4 as the two real target machines; added a genuinely 8GB-safe `qwen2.5:7b` entry
-- [x] `loop.py`: added debug logging to `_extract_cost()`'s two previously-silent exception fallbacks
-- [x] Installed Ollama via Homebrew (wasn't present on this machine), pulled `qwen2.5:14b`, ran the AV demo live — completed in 7 iterations, correctly reported room 320-B's recording status
-- [x] `.env.example` + `docker-compose.prod.yml`: added `SILKROUTE_FINOPS_*` passthrough; `docs/av-demo-guide.md` finished with Telemetry-setup + Dry-run sections
+- [x] Task 1: `model_cost_snapshots` table in `sql/init.sql` (mirrors `budget_snapshots`'
+      BIGSERIAL-PK + UNIQUE convention) — one review round-trip fixed a redundant index
+- [x] Task 2: `db/repositories/model_cost_snapshots.py` (`rollup_day`, `get_snapshots`),
+      12 tests, mirrors `budget_snapshots.py` exactly but grouped by
+      `project_id, model_id, provider`
+- [x] Task 3: `GET /budget/models` route in `api/routes/budget.py`, declared before
+      `/{project_id}` (route-ordering rule, confirmed correct by 2 independent reviews),
+      4 tests including a shadow-route regression guard
+- [x] Task 4: wired the new rollup into the daemon scheduler's existing daily
+      `_budget_rollup()` cron tick alongside `budget_snapshots.rollup_day()` — no new schedule
+- [x] Task 5: dashboard "Cost by Model" section on the Budget page — one review round-trip
+      fixed a real bug (same `model_id` served by two different providers, e.g. direct
+      DeepSeek vs. OpenRouter fallback, was collapsing into one misleading row; now keyed on
+      `model_id::provider` to match the backend's actual grouping grain)
+- [x] Task 6: end-to-end manual verification — started a real Postgres container, confirmed
+      connectivity before trusting any row counts (a devil's-advocate review had flagged that
+      `persist_sessions` defaulting to `True` doesn't guarantee Postgres is actually reachable),
+      ran the AV demo live to generate real `cost_logs` rows, triggered the rollup manually
+      against real Postgres, hit `GET /budget/models` directly (real JSON response), and
+      visually confirmed the dashboard renders it via a real browser session
+      (`ollama/qwen2.5:14b`, 18 requests, 37,199 tokens, $0.0000 — all correct)
 
 ## Blockers
-None. (Previously: Task 5's live model-finops + Supabase telemetry test was blocked on the user creating a Supabase project. Reframed below — no longer gating anything.)
+None.
 
 ## Tomorrow
-Implement the local cost/model dashboard per `docs/plans/2026-07-12-local-cost-dashboard-design.md`: a `model_cost_snapshots` table + repository (mirrors `budget_snapshots.py`), a new `GET /budget/models` route (mind the route-ordering gotcha — must be declared before `/budget/{project_id}`), and a "Cost by Model" section on the dashboard's Budget page. This reuses data silkroute's own Postgres already captures for every run (including local Ollama) — no new service, no Supabase needed. The earlier Supabase E2E test is now optional/non-blocking: model-finops is reframed as a bonus integration, not the way to get cost visibility — air-gapped/government deployments just leave `SILKROUTE_FINOPS_ENABLED=false` (already the default) and get full local visibility anyway.
+Decide how to integrate `feature/local-cost-dashboard` back into `main` (merge, PR, or
+otherwise) via `superpowers:finishing-a-development-branch` — not done automatically as part
+of this work. Separately: the earlier live model-finops + Supabase telemetry test remains
+optional/non-blocking — model-finops is now explicitly a bonus integration, not required for
+cost visibility, since this branch delivers full local cost/model tracking with zero cloud
+dependency.
 
 ## Tech Stack
 Python 3.12 (Click + Pydantic + FastAPI + uvicorn + litellm + asyncpg + structlog + Rich + redis + apscheduler + mcp + httpx) | Next.js 15 (React 19, Tailwind v4) | PostgreSQL 16 | Redis 7 | LiteLLM | Docker Compose
 
 ## Session Stats
-- Tests: 928 passing, lint clean (5 pre-existing ruff errors in cli.py/autoresearch, untouched)
-- Commits today: 2 (`ec27f29` model/DeepSeek fixes, `57f69a2` telemetry docs/config closeout), both pushed
-- Sprint: 4/5 tasks complete; #5 blocked on user-provided Supabase credentials
+- Tests: 945 passing on this branch (up from 928 on `main`, +17 new tests across Tasks 2-3-4),
+  `npm run build` clean
+- Commits on `feature/local-cost-dashboard`: dec8eb8 → 395b490 → 77e1d14 → 52e07b3 → 35185af
+  → 42ef35d → da19610 (7 commits, including 2 review-driven fix commits)
+- All 6 plan tasks complete, each independently spec-reviewed and code-quality-reviewed
 
 ## Links
 - GitHub: https://github.com/ScientiaCapital/silkroute
 - epiphan-mcp-server: https://github.com/ScientiaCapital/epiphan-mcp-server
 - model-finops: https://github.com/ScientiaCapital/model-finops
+- Design doc: `docs/plans/2026-07-12-local-cost-dashboard-design.md`
+- Implementation plan: `docs/plans/2026-07-12-local-cost-dashboard-implementation.md`
 
 ---
 
-_Updated by `/begin` sprint-execution session. 2026-07-12._
+_Updated by subagent-driven-development execution session. 2026-07-12._
