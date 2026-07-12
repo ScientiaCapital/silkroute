@@ -34,3 +34,6 @@ silkroute_redis/
 
 # Git worktrees
 .worktrees/
+
+# Playwright MCP debugging artifacts
+.playwright-mcp/

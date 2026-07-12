@@ -17,6 +17,9 @@
 | 25 | AutoResearch: add Prompt Lab target (`targets/prompt.py`) | Plan (Phase 10) | M | Medium | --- | Future |
 | 26 | AutoResearch: add Routing Optimizer target (`targets/routing.py`) | Plan (Phase 10) | M | Medium | --- | Future |
 | 27 | AutoResearch: add dashboard page with live experiment leaderboard | Plan (Phase 10) | M | Medium | --- | Future |
+| 28 | No formal `.claude/contracts/` entry for MCP bridge / finops / cost-dashboard scope of work | Observer WARNING (2026-07-12 `/begin` audit) | S | Low | --- | Future |
+| 29 | `demo/`/`docs/` top-level dirs missing from CLAUDE.md's architecture diagram | Observer SMELL (2026-07-12 `/begin` audit) | XS | Low | --- | Future |
+| 30 | Local cost dashboard (`feature/local-cost-dashboard` branch): decide merge strategy into `main` | This session (2026-07-12) | XS | Medium | --- | Next session |
 
 ## Priority: Low (future phases)
 
