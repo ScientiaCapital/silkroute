@@ -21,6 +21,12 @@ services:
       SILKROUTE_API_HOST: "0.0.0.0"
       SILKROUTE_API_CORS_ORIGINS: '["http://localhost:3000"]'
       SILKROUTE_OPENROUTER_API_KEY: ${SILKROUTE_OPENROUTER_API_KEY:-}
+      # model-finops telemetry (opt-in; inert unless ENABLED=true). base_url must
+      # point at a finops instance reachable from inside the container, not the
+      # host's localhost — override on the host when enabling.
+      SILKROUTE_FINOPS_ENABLED: ${SILKROUTE_FINOPS_ENABLED:-false}
+      SILKROUTE_FINOPS_BASE_URL: ${SILKROUTE_FINOPS_BASE_URL:-http://localhost:8000}
+      SILKROUTE_FINOPS_TOKEN: ${SILKROUTE_FINOPS_TOKEN:-}
     depends_on:
       postgres:
         condition: service_healthy

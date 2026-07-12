@@ -25,12 +25,14 @@ different local models and what shows up on the model-finops dashboard once tele
 | Qwen2.5 32B | `qwen2.5:32b` | **Verified** — larger, slower, same behavior |
 | Qwen3 30B | `qwen3:30b-a3b` | **Verified** — pre-existing silkroute entry |
 | GLM-4 9B | `glm4:9b` | **Verified**, but an older generation tag |
-| DeepSeek R1 14B | `deepseek-r1:14b` | ⚠️ **UNVERIFIED** — best-guess tag, run `ollama search deepseek` or check https://ollama.com/library before pulling |
-| GLM-4.6 9B | `glm4.6:9b` | ⚠️ **UNVERIFIED** — best-guess at a current-gen GLM tag, same caveat |
+| DeepSeek R1 14B | `deepseek-r1:14b` | **Verified** (2026-07-12) — 9.0 GB, 128K context on ollama.com/library |
+| ~~GLM-4.6 9B~~ | ~~`glm4.6:9b`~~ | ❌ **Invalid — no such tag.** Ollama publishes no `glm4.6`; current-gen GLM names are `glm-4.7` / `glm-5`. Use `glm4:9b` above, or pick a current tag from ollama.com/library and confirm its size with `ollama show <tag>` before pulling. |
 
-For anything marked unverified, confirm the real tag first — don't assume it's correct just
-because it's in the registry (`src/silkroute/providers/models.py` documents this same caveat
-inline).
+Model tags drift — confirm any tag against [ollama.com/library](https://ollama.com/library) (or
+`ollama show <tag>`) before pulling rather than trusting a registry entry. The silkroute registry
+(`src/silkroute/providers/models.py`) is already corrected: the invalid `glm4.6:9b` guess was
+removed (GLM-4.6 is a ~355B MoE model — no lightweight local tag exists), leaving `glm4:9b` as the
+only local GLM option.
 
 ## Running the demo per model
 
@@ -43,6 +45,37 @@ python demo/agent_ready_av_demo.py --mock-pearl \
 
 Swap `--model` for any registered `ollama/<tag>` to try a different one. Drop `--mock-pearl` and
 pass `--pearl-devices`/`--pearl-username`/`--pearl-password` to run against a real fleet instead.
+
+## Telemetry setup
+
+Telemetry is opt-in and fire-and-forget — the agent never blocks or fails on a slow or unreachable
+finops endpoint. To turn it on, set a matching shared secret on both sides.
+
+On **silkroute** (host env, or your `.env` — the vars are documented in `.env.example`):
+
+```bash
+export SILKROUTE_FINOPS_ENABLED=true
+export SILKROUTE_FINOPS_BASE_URL=http://localhost:8000   # where model-finops is reachable
+export SILKROUTE_FINOPS_TOKEN=<shared-secret>            # any strong random string
+```
+
+On **model-finops** (its own env / `.env`):
+
+```bash
+export FINOPS_INGEST_TOKEN=<same-shared-secret>          # MUST equal SILKROUTE_FINOPS_TOKEN
+```
+
+The two tokens must be identical — the ingest endpoint (`POST /api/telemetry/ingest`) rejects a
+mismatch or a missing token with HTTP 401. Confirm model-finops is actually up before demoing:
+
+```bash
+curl -fsS http://localhost:8000/health && echo "  finops up"
+```
+
+> **One-time DB step (model-finops side).** The ingest endpoint writes extra columns
+> (`project_id`, `session_id`, `task_type`, `latency_ms`, `source`) that aren't in the base schema.
+> Run `migrations/supabase_add_finops_ingest_columns.sql` once in the Supabase SQL Editor before the
+> first real run, or those inserts fail. It's additive and idempotent — safe to re-run.
 
 ## What shows up on the model-finops dashboard
 
@@ -59,6 +92,40 @@ model-finops's `/api/telemetry/ingest` endpoint. On the dashboard (`/dashboard`,
   — these land in the Supabase `requests` table (via the additive migration in
   `migrations/`) but no dashboard page renders them yet. Check via the Supabase table browser if
   you need them.
+
+## Dry run — end to end
+
+Run this once yourself before showing anyone. Anything in `<…>` is a placeholder for *your* live
+output — fill it in from your own run rather than trusting these as fixed numbers.
+
+```bash
+# 1. Start the local model server (leave running in its own terminal)
+ollama serve
+
+# 2. Pull the model you'll demo (first time only — multi-GB download)
+ollama pull qwen2.5:14b
+ollama list                       # confirm the tag is present
+
+# 3. (Optional) turn on telemetry — see "Telemetry setup" above
+export SILKROUTE_FINOPS_ENABLED=true \
+       SILKROUTE_FINOPS_BASE_URL=http://localhost:8000 \
+       SILKROUTE_FINOPS_TOKEN=<secret>
+
+# 4. Run the demo against a mock Pearl (no hardware needed)
+python demo/agent_ready_av_demo.py --mock-pearl --model ollama/qwen2.5:14b
+```
+
+What a good run looks like:
+
+- The agent calls epiphan-mcp-server's tools over MCP and returns a coherent plain-English answer:
+  `<paste the final answer here — e.g. "Recording is active in room 320-B, started 14 min ago">`
+- End-to-end latency for the local 14B model: `<~N s — record your own>`
+- If telemetry is on, a fresh row appears on the model-finops dashboard within a few seconds, at
+  **cost $0.00** (correct — local models have zero marginal cost; see the dashboard section above).
+
+If you get an error instead of an answer, the usual causes are: `ollama serve` not running, the tag
+not pulled (check `ollama list`), or `../epiphan-mcp-server/.venv` missing — pass `--epiphan-python`
+to point at the right interpreter (see Prerequisites).
 
 ## Before sharing with Vadim — checklist
 
