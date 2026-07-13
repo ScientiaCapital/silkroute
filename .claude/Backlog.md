@@ -1,6 +1,6 @@
 # SilkRoute Backlog
 
-**Updated:** 2026-03-22 (Phase 10 complete)
+**Updated:** 2026-07-12 (local cost dashboard merged; #28/#29/#30 resolved)
 
 ## Priority: Medium
 
@@ -17,9 +17,7 @@
 | 25 | AutoResearch: add Prompt Lab target (`targets/prompt.py`) | Plan (Phase 10) | M | Medium | --- | Future |
 | 26 | AutoResearch: add Routing Optimizer target (`targets/routing.py`) | Plan (Phase 10) | M | Medium | --- | Future |
 | 27 | AutoResearch: add dashboard page with live experiment leaderboard | Plan (Phase 10) | M | Medium | --- | Future |
-| 28 | No formal `.claude/contracts/` entry for MCP bridge / finops / cost-dashboard scope of work | Observer WARNING (2026-07-12 `/begin` audit) | S | Low | --- | Future |
-| 29 | `demo/`/`docs/` top-level dirs missing from CLAUDE.md's architecture diagram | Observer SMELL (2026-07-12 `/begin` audit) | XS | Low | --- | Future |
-| 30 | Local cost dashboard (`feature/local-cost-dashboard` branch): decide merge strategy into `main` | This session (2026-07-12) | XS | Medium | --- | Next session |
+| 31 | Optional (code review, non-blocking): date-range index on `model_cost_snapshots` if dashboard query patterns need it; `test_sql_aggregates_cost_and_tokens` coverage for rollup SQL | Code review (2026-07-12) | S | Low | --- | Future |
 
 ## Priority: Low (future phases)
 
@@ -31,6 +29,14 @@
 | 14 | Background daemonization (fork/detach) | Phase 7 Full | M | Medium | --- | Future |
 | 15 | API rate limiting tiers | Plan scope exclusion (Phase 2) | M | Medium | --- | Future |
 | 16 | Ralph autonomy boundary — no human approval gate | Observer R1 (Phase 4) | M | Low | --- | Future |
+
+## Resolved (This Session — 2026-07-12 evening)
+
+| Item | Resolution |
+|------|-----------|
+| #30 Merge strategy for `feature/local-cost-dashboard` | RESOLVED — direct `--no-ff` merge to `main` (`a581b0c`), 945/945 tests + clean build on merged main, pushed; worktree removed, branch deleted locally + on origin |
+| #29 `demo/`/`docs/` missing from CLAUDE.md architecture diagram | RESOLVED — added `demo/`, `docs/`, `scripts/`; fixed stale dashboard page count (3 → 5) |
+| #28 No `.claude/contracts/` entry for MCP bridge / finops / cost-dashboard | RESOLVED — `.claude/contracts/2026-07-12-mcp-finops-cost-dashboard.md` (retroactive scope-of-work contract) |
 
 ## Resolved (This Session — Phase 10)
 
@@ -108,5 +114,5 @@ _Effort: XS (<1hr), S (1-3hr), M (3-8hr), L (1-2d)_
 - [x] Shipped a fully local, zero-cloud-dependency per-model cost dashboard: `model_cost_snapshots` table + repository (mirrors `budget_snapshots.py`), `GET /budget/models` API route, daily scheduler rollup, and a "Cost by Model" section on the dashboard's Budget page. Reuses `cost_logs` data silkroute's own self-hosted Postgres already captures for every run — no new service, no Supabase dependency. Motivated by a real requirement: government/courts/military and privacy-conscious deployments can't tolerate phoning home to cloud SaaS.
 - [x] Verified end-to-end against a real Postgres container: applied schema, ran the AV demo live to generate real `cost_logs` rows, triggered the rollup manually, hit the API directly, and visually confirmed the dashboard renders real data via a browser session.
 - [x] Two real bugs caught and fixed via subagent code review before merge: (1) `deepseek-r1-0528`'s native-name mapping was silently downgrading premium-tier reasoning to Flash-tier via a shared alias — separate fix, see above; (2) the dashboard's per-model aggregation was keyed on `model_id` alone, collapsing two different providers serving the same model (e.g. direct DeepSeek vs. OpenRouter fallback) into one row with a misleading provider — fixed by keying on `model_id::provider` to match the backend's actual grouping grain.
-- [ ] Decide how to merge `feature/local-cost-dashboard` back into `main` — not done as part of this work.
-- [ ] Optional follow-up (non-blocking, per code review): consider adding an index supporting date-range scans on `model_cost_snapshots` if dashboard query patterns end up needing it; consider a `test_sql_aggregates_cost_and_tokens` test to close a minor coverage gap in the rollup SQL.
+- [x] Decide how to merge `feature/local-cost-dashboard` back into `main` — resolved 2026-07-12 evening: direct `--no-ff` merge (`a581b0c`), verified + pushed, branch and worktree cleaned up.
+- [ ] Optional follow-up (non-blocking, per code review) — tracked as Backlog #31: date-range index on `model_cost_snapshots` if needed; `test_sql_aggregates_cost_and_tokens` coverage for the rollup SQL.

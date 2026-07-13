@@ -1,67 +1,54 @@
 # silkroute
 
-**Branch**: main | **Updated**: 2026-07-12
+**Branch**: main | **Updated**: 2026-07-12 (evening session)
 
 ## Status
-Full day: model registry fixes (DeepSeek v4 migration, GLM naming, hardware-aware `min_ram_gb`)
-pushed to `main` this morning, then a full brainstorm → design → implementation cycle for a
-**fully local, zero-cloud-dependency cost/model dashboard** — motivated by a real requirement
-that government/courts/military and privacy-conscious deployments can't tolerate phoning home
-to cloud SaaS (like `model-finops`'s Supabase dependency). Built via subagent-driven
-development in an isolated worktree/branch (`feature/local-cost-dashboard`): 6 tasks, each
-implemented, spec-reviewed, and code-quality-reviewed independently. Two real bugs caught and
-fixed via that review process before merge-readiness. Verified fully end-to-end against a real
-Postgres container, a live AV demo run, a direct API call, and an actual browser render.
-945/945 tests passing on the branch, `npm run build` clean. Branch pushed to `origin`, **not
-yet merged into `main`** — merge decision deferred (Backlog #30).
+Evening session: landed the local cost dashboard. `feature/local-cost-dashboard` merged into
+`main` via direct `--no-ff` merge (`a581b0c`) — code merged 100% clean (only `.claude/` state
+files conflicted, resolved by keeping main's newer end-day versions). Post-merge verification
+on `main`: **945/945 tests passing** (the 6 known deepagents failures did not reproduce this
+run), `ruff` clean except the 5 known pre-existing errors (cli.py/autoresearch), dashboard
+`npm run build` clean. Pushed; worktree `.worktrees/local-cost-dashboard` removed, feature
+branch deleted locally and on origin. Backlog #28/#29/#30 all resolved. The local
+zero-cloud-dependency cost/model tracking story is now fully on `main`.
 
 ## Done (This Session)
-- [x] Model registry: DeepSeek native-name migration (`deepseek-v4-flash`/`-pro`, ahead of the
-      2026-07-24 legacy retirement), GLM naming fix (`GLM_4_9B_LOCAL`), `min_ram_gb` hardware
-      tagging, Ollama installed + AV demo verified live — all pushed to `main`
-- [x] Local cost dashboard design brainstormed + validated with user, doc committed to `main`
-- [x] Implementation plan written, DA-reviewed (caught a real gap: E2E verification could
-      silently pass against an empty `cost_logs` table if Postgres wasn't actually reachable —
-      fixed before execution)
-- [x] All 6 implementation tasks complete on `feature/local-cost-dashboard`: schema
-      (`model_cost_snapshots`), repository, `GET /budget/models` API route, scheduler wiring,
-      dashboard "Cost by Model" section, full E2E verification
-- [x] Two real bugs caught by code review and fixed pre-merge: a redundant DB index, and a
-      dashboard aggregation bug that collapsed two different providers serving the same
-      model into one row with a misleading provider label
-- [x] End-of-day: observer findings dispositioned (2 resolved, 2 logged to Backlog #28/#29),
-      security sweep clean (gitleaks + manual grep + `.env`/`.pem`/`.key` history, no leaks),
-      portfolio metrics captured, `main` + `feature/local-cost-dashboard` both pushed
+- [x] #30: Merged `feature/local-cost-dashboard` → `main` (`a581b0c`), verified (945/945,
+      build clean), pushed, worktree + branch cleaned up (local and origin)
+- [x] #29: CLAUDE.md architecture diagram — added `demo/`, `docs/`, `scripts/`; fixed stale
+      dashboard page count (3 → 5 pages) (`9007496`)
+- [x] #28: Retroactive scope-of-work contract written:
+      `.claude/contracts/2026-07-12-mcp-finops-cost-dashboard.md` (MCP bridge + finops
+      telemetry + local cost dashboard: inputs/outputs/invariants/scope boundary)
+- [x] Backlog.md updated — #28/#29/#30 moved to Resolved; code-review optional follow-ups
+      captured as new #31 (date-range index + rollup SQL test coverage, non-blocking)
 
 ## Blockers
 None.
 
 ## Tomorrow
-Decide how to integrate `feature/local-cost-dashboard` into `main` — merge, PR, or otherwise —
-via `superpowers:finishing-a-development-branch` (not done automatically). PR link already
-available: https://github.com/ScientiaCapital/silkroute/pull/new/feature/local-cost-dashboard.
-Separately, the live `model-finops` + Supabase telemetry test remains optional/non-blocking —
-`model-finops` is now explicitly a bonus integration, not required for cost visibility, since
-this branch delivers full local cost/model tracking with zero cloud dependency.
+Open field — merge is done, backlog mediums are all Future-tagged. Candidates: AutoResearch
+follow-ups (#25 Prompt Lab target, #26 Routing Optimizer target, #27 experiment leaderboard
+dashboard page), first Railway deploy (watch #23 HEALTHCHECK), or the optional live
+model-finops + Supabase telemetry test (bonus, non-blocking). Note: `.env` missing at repo
+root (`.env.example` exists) — copy before any live-service run.
 
 ## Tech Stack
 Python 3.12 (Click + Pydantic + FastAPI + uvicorn + litellm + asyncpg + structlog + Rich + redis + apscheduler + mcp + httpx) | Next.js 15 (React 19, Tailwind v4) | PostgreSQL 16 | Redis 7 | LiteLLM | Docker Compose
 
 ## Session Stats
-- Tests: 928 passing on `main` / 945 passing on `feature/local-cost-dashboard`, lint clean
-  (5 pre-existing ruff errors in cli.py/autoresearch, untouched, unrelated)
-- Commits today: 5 on `main` (model registry + state sync), 7 on the feature branch
-- Lines: +1,450/-19 on the feature branch (schema, repository, API, scheduler, dashboard, tests)
-- Security: gitleaks clean, no `.env`/`.pem`/`.key` ever committed
+- Tests: 945/945 passing on merged `main`, lint clean (5 known pre-existing ruff errors)
+- Commits: merge commit + docs fix + state sync
+- Cost: MTD $597.29 (non-gating per standing note — Epiphan covers)
 
 ## Links
 - GitHub: https://github.com/ScientiaCapital/silkroute
 - epiphan-mcp-server: https://github.com/ScientiaCapital/epiphan-mcp-server
 - model-finops: https://github.com/ScientiaCapital/model-finops
 - Design doc: `docs/plans/2026-07-12-local-cost-dashboard-design.md`
-- Implementation plan: `docs/plans/2026-07-12-local-cost-dashboard-implementation.md` (on the feature branch)
-- Open PR: https://github.com/ScientiaCapital/silkroute/pull/new/feature/local-cost-dashboard
+- Implementation plan: `docs/plans/2026-07-12-local-cost-dashboard-implementation.md`
+- Contract: `.claude/contracts/2026-07-12-mcp-finops-cost-dashboard.md`
 
 ---
 
-_Updated by `/end` day-close workflow. 2026-07-12._
+_Updated 2026-07-12 evening session (merge + backlog cleanup)._
