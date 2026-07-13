@@ -12,7 +12,10 @@ silkroute/
 │   ├── config/settings.py  # Pydantic configuration system
 │   └── providers/models.py # 13-model registry (3 tiers)
 ├── dashboard/              # Next.js 15 App Router + Tailwind
-│   └── src/app/            # 3 pages: Overview, Models, Budget
+│   └── src/app/            # 5 pages: Overview, Projects, Models, Budget, Task History
+├── demo/                   # AV demo agents + Pearl mock server
+├── docs/                   # Guides + design/implementation plans (docs/plans/)
+├── scripts/                # Deployment entrypoints (start.sh)
 ├── sql/init.sql            # PostgreSQL schema (7 tables, 2 views)
 ├── docker-compose.yml      # LiteLLM + Postgres + Redis
 ├── litellm_config.yaml     # Chinese model routing config
