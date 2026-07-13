@@ -70,6 +70,21 @@ export interface ProjectBudgetResponse {
   monthly_limit_usd: number | null;
 }
 
+export interface ModelCostSnapshotItem {
+  project_id: string;
+  model_id: string;
+  provider: string;
+  snapshot_date: string;
+  total_cost_usd: number;
+  total_requests: number;
+  total_tokens: number;
+}
+
+export interface ModelCostSnapshotListResponse {
+  snapshots: ModelCostSnapshotItem[];
+  count: number;
+}
+
 export interface SupervisorStepSummary {
   id: string;
   name: string;

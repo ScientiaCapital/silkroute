@@ -73,6 +73,25 @@ CREATE TABLE IF NOT EXISTS budget_snapshots (
 );
 
 -- ============================================================
+-- Model Cost Snapshots — daily rollups broken out by model
+-- ============================================================
+CREATE TABLE IF NOT EXISTS model_cost_snapshots (
+    id              BIGSERIAL PRIMARY KEY,
+    project_id      TEXT NOT NULL REFERENCES projects(id),
+    model_id        TEXT NOT NULL,
+    provider        TEXT NOT NULL,
+    snapshot_date   DATE NOT NULL,
+    total_cost_usd  NUMERIC(10, 6) NOT NULL DEFAULT 0.0,
+    total_requests  INTEGER NOT NULL DEFAULT 0,
+    total_tokens    BIGINT NOT NULL DEFAULT 0,
+
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE(project_id, model_id, provider, snapshot_date)
+);
+
+CREATE INDEX IF NOT EXISTS idx_model_cost_snapshots_model ON model_cost_snapshots(model_id);
+
+-- ============================================================
 -- Agent Sessions — conversation state and history
 -- ============================================================
 CREATE TABLE IF NOT EXISTS agent_sessions (

@@ -1,4 +1,4 @@
-import type { ProjectListResponse, GlobalBudgetResponse, ProjectBudgetResponse, SupervisorSession } from "./types";
+import type { ProjectListResponse, GlobalBudgetResponse, ProjectBudgetResponse, ModelCostSnapshotListResponse, SupervisorSession } from "./types";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8787";
 
@@ -22,6 +22,17 @@ export async function fetchGlobalBudget(): Promise<GlobalBudgetResponse> {
 
 export async function fetchProjectBudget(projectId: string): Promise<ProjectBudgetResponse> {
   return apiFetch<ProjectBudgetResponse>(`/budget/${encodeURIComponent(projectId)}`);
+}
+
+export async function fetchModelCosts(
+  projectId: string,
+  startDate?: string,
+  endDate?: string
+): Promise<ModelCostSnapshotListResponse> {
+  const params = new URLSearchParams({ project_id: projectId });
+  if (startDate) params.set("start_date", startDate);
+  if (endDate) params.set("end_date", endDate);
+  return apiFetch<ModelCostSnapshotListResponse>(`/budget/models?${params}`);
 }
 
 export async function fetchHealth(): Promise<{ status: string }> {

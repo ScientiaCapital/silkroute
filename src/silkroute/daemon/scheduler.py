@@ -167,14 +167,18 @@ class DaemonScheduler:
         await self._queue.submit(request)
 
     async def _budget_rollup(self) -> None:
-        """Roll up yesterday's cost_logs into budget_snapshots."""
+        """Roll up yesterday's cost_logs into budget_snapshots and model_cost_snapshots."""
         import datetime
 
         from silkroute.db.repositories.budget_snapshots import rollup_day
+        from silkroute.db.repositories.model_cost_snapshots import (
+            rollup_day as rollup_model_costs_day,
+        )
 
         yesterday = datetime.date.today() - datetime.timedelta(days=1)
         log.info("scheduler_budget_rollup_triggered", date=str(yesterday))
         await rollup_day(self._db_pool, yesterday)
+        await rollup_model_costs_day(self._db_pool, yesterday)
         log.info("scheduler_budget_rollup_done", date=str(yesterday))
 
     async def _ralph_cycle(self) -> None:

@@ -1,5 +1,5 @@
-import { fetchProjects, fetchProjectBudget } from "@/lib/api";
-import type { BudgetSnapshot } from "@/lib/types";
+import { fetchProjects, fetchProjectBudget, fetchModelCosts } from "@/lib/api";
+import type { BudgetSnapshot, ModelCostSnapshotItem } from "@/lib/types";
 
 const mockBudgets: BudgetSnapshot[] = [
   { projectId: "default", projectName: "Default Project", budgetMonthlyUsd: 200, spentThisMonth: 0, remaining: 200, status: "OK" },
@@ -48,6 +48,17 @@ async function getBudgets(): Promise<BudgetSnapshot[]> {
   }
 }
 
+async function getModelCosts(projectIds: string[]): Promise<ModelCostSnapshotItem[]> {
+  try {
+    const results = await Promise.all(
+      projectIds.map((id) => fetchModelCosts(id).catch(() => ({ snapshots: [], count: 0 })))
+    );
+    return results.flatMap((r) => r.snapshots);
+  } catch {
+    return [];
+  }
+}
+
 const statusColors: Record<string, string> = {
   OK: "text-green-500",
   WARNING: "text-amber-500",
@@ -59,6 +70,22 @@ export default async function BudgetPage() {
   const budgets = await getBudgets();
   const totalBudget = budgets.reduce((sum, b) => sum + b.budgetMonthlyUsd, 0);
   const totalSpent = budgets.reduce((sum, b) => sum + b.spentThisMonth, 0);
+
+  const modelCosts = await getModelCosts(budgets.map((b) => b.projectId));
+
+  // Aggregate across all projects/dates, keyed on (model, provider) to match the
+  // backend's grouping grain — the same model_id can appear under multiple providers
+  // (e.g. direct vendor API vs. OpenRouter fallback).
+  const byModel = new Map<string, { modelId: string; provider: string; cost: number; requests: number; tokens: number }>();
+  for (const row of modelCosts) {
+    const key = `${row.model_id}::${row.provider}`;
+    const existing = byModel.get(key) ?? { modelId: row.model_id, provider: row.provider, cost: 0, requests: 0, tokens: 0 };
+    existing.cost += row.total_cost_usd;
+    existing.requests += row.total_requests;
+    existing.tokens += row.total_tokens;
+    byModel.set(key, existing);
+  }
+  const modelRows = Array.from(byModel.entries()).sort((a, b) => b[1].cost - a[1].cost);
 
   return (
     <div>
@@ -105,6 +132,40 @@ export default async function BudgetPage() {
             ))}
           </tbody>
         </table>
+      </div>
+
+      {/* Cost by Model */}
+      <div className="mt-8 bg-neutral-900 border border-neutral-800 rounded-xl overflow-hidden">
+        <div className="p-6 pb-0">
+          <h2 className="text-lg font-semibold">Cost by Model</h2>
+          <p className="text-neutral-500 text-sm mt-1 mb-4">Last 30 days, across all projects.</p>
+        </div>
+        {modelRows.length === 0 ? (
+          <p className="text-neutral-500 text-sm p-6 pt-0">No model usage recorded yet.</p>
+        ) : (
+          <table className="w-full">
+            <thead>
+              <tr className="border-b border-neutral-800 text-xs text-neutral-500 uppercase tracking-wider">
+                <th className="text-left p-4">Model</th>
+                <th className="text-left p-4">Provider</th>
+                <th className="text-right p-4">Requests</th>
+                <th className="text-right p-4">Tokens</th>
+                <th className="text-right p-4">Cost</th>
+              </tr>
+            </thead>
+            <tbody>
+              {modelRows.map(([key, row]) => (
+                <tr key={key} className="border-b border-neutral-800/50 hover:bg-neutral-800/30">
+                  <td className="p-4 font-medium font-mono text-sm">{row.modelId}</td>
+                  <td className="p-4 text-neutral-400 text-sm">{row.provider}</td>
+                  <td className="p-4 text-right font-mono text-sm">{row.requests.toLocaleString()}</td>
+                  <td className="p-4 text-right font-mono text-sm">{row.tokens.toLocaleString()}</td>
+                  <td className="p-4 text-right font-mono text-sm">${row.cost.toFixed(4)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
       </div>
 
       {/* Alert Thresholds */}
