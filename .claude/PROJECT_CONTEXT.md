@@ -27,11 +27,13 @@ zero-cloud-dependency cost/model tracking story is now fully on `main`.
 None.
 
 ## Tomorrow
-Open field — merge is done, backlog mediums are all Future-tagged. Candidates: AutoResearch
-follow-ups (#25 Prompt Lab target, #26 Routing Optimizer target, #27 experiment leaderboard
-dashboard page), first Railway deploy (watch #23 HEALTHCHECK), or the optional live
-model-finops + Supabase telemetry test (bonus, non-blocking). Note: `.env` missing at repo
-root (`.env.example` exists) — copy before any live-service run.
+Tomorrow: AutoResearch #27 experiment leaderboard dashboard page (recommended, not yet
+confirmed) via feature-dev + dashboard page pattern (`tasks/page.tsx` + repository + API
+route) | single builder, no worktree needed | Est: half day, ~$10-20 | Observer notes: no
+unresolved flags; `.env` missing at repo root — copy from `.env.example` before any
+live-service run. Alternatives: #26 Routing Optimizer target, #25 Prompt Lab, or hygiene
+sweep (#17/#19/#21/#31). **Railway is off the table for now per Tim (2026-07-12)** — don't
+propose the first deploy.
 
 ## Tech Stack
 Python 3.12 (Click + Pydantic + FastAPI + uvicorn + litellm + asyncpg + structlog + Rich + redis + apscheduler + mcp + httpx) | Next.js 15 (React 19, Tailwind v4) | PostgreSQL 16 | Redis 7 | LiteLLM | Docker Compose

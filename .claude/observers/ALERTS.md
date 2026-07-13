@@ -1,7 +1,7 @@
 # Observer Alerts — silkroute
-**Date:** 2026-07-12
+**Date:** 2026-07-12 (evening close)
 **Active BLOCKERs:** 0
-**Status:** CLEAR — Local cost dashboard (feature/local-cost-dashboard) shipped, all 6 tasks reviewed and approved, 945/945 tests passing, verified end-to-end against a real Postgres + live browser session.
+**Status:** CLEAR — Local cost dashboard merged to `main` (`a581b0c`), 945/945 tests on merged main, build clean, branch + worktree cleaned up. Backlog #28/#29/#30 resolved; optional follow-ups tracked as #31.
 
 ---
 
