@@ -17,7 +17,13 @@ services:
       PORT: "8787"
       SILKROUTE_DB_POSTGRES_URL: postgresql://silkroute:silkroute@postgres:5432/silkroute
       SILKROUTE_DB_REDIS_URL: redis://redis:6379/0
-      SILKROUTE_API_KEY: ""
+      # Production posture: auth REQUIRED. The API refuses to start if the key is
+      # empty (SILKROUTE_ENVIRONMENT=production), and `:?` makes compose itself
+      # error if SILKROUTE_API_KEY is unset — no accidental open-money-faucet.
+      SILKROUTE_ENVIRONMENT: production
+      SILKROUTE_API_KEY: ${SILKROUTE_API_KEY:?SILKROUTE_API_KEY is required for production}
+      # Set to "true" for a public try-it deployment (disables money-spending endpoints).
+      SILKROUTE_API_DEMO_MODE: ${SILKROUTE_API_DEMO_MODE:-false}
       SILKROUTE_API_HOST: "0.0.0.0"
       SILKROUTE_API_CORS_ORIGINS: '["http://localhost:3000"]'
       SILKROUTE_OPENROUTER_API_KEY: ${SILKROUTE_OPENROUTER_API_KEY:-}

@@ -12,14 +12,19 @@ from collections.abc import AsyncIterator
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
 
-from silkroute.api.auth import require_auth
+from silkroute.api.auth import require_auth, require_not_demo
 from silkroute.api.deps import get_api_config
 from silkroute.api.models import RuntimeInvokeRequest, RuntimeInvokeResponse
 from silkroute.config.settings import ApiConfig
 from silkroute.mantis.runtime.interface import RuntimeConfig
 from silkroute.mantis.runtime.registry import get_runtime
 
-router = APIRouter(prefix="/runtime", tags=["runtime"], dependencies=[Depends(require_auth)])
+# Both endpoints spend money → gated by require_not_demo in addition to auth.
+router = APIRouter(
+    prefix="/runtime",
+    tags=["runtime"],
+    dependencies=[Depends(require_auth), Depends(require_not_demo)],
+)
 
 
 @router.post("/invoke")

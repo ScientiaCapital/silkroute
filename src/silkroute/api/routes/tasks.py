@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from silkroute.api.auth import require_auth
+from silkroute.api.auth import require_auth, require_not_demo
 from silkroute.api.deps import get_queue
 from silkroute.api.models import (
     QueueStatusResponse,
@@ -22,7 +22,7 @@ from silkroute.daemon.queue import TaskQueue, TaskRequest
 router = APIRouter(prefix="/tasks", tags=["tasks"], dependencies=[Depends(require_auth)])
 
 
-@router.post("", status_code=201)
+@router.post("", status_code=201, dependencies=[Depends(require_not_demo)])
 async def submit_task(
     body: TaskSubmitRequest,
     queue: TaskQueue = Depends(get_queue),

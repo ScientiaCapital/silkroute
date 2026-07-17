@@ -1,10 +1,15 @@
 import type { ProjectListResponse, GlobalBudgetResponse, ProjectBudgetResponse, ModelCostSnapshotListResponse, SupervisorSession } from "./types";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8787";
+// Server-only secret (no NEXT_PUBLIC_ prefix → never shipped to the browser).
+// These fetches run in server components, so the token stays server-side.
+// Lets the dashboard talk to an auth-on backend (SILKROUTE_API_KEY set).
+const API_KEY = process.env.SILKROUTE_API_KEY;
 
 async function apiFetch<T>(path: string): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {
     next: { revalidate: 30 },
+    headers: API_KEY ? { Authorization: `Bearer ${API_KEY}` } : undefined,
   });
   if (!res.ok) {
     throw new Error(`API error: ${res.status} ${res.statusText}`);

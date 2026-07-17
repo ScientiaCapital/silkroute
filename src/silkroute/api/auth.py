@@ -44,3 +44,19 @@ async def require_auth(
             detail="Invalid API key",
             headers={"WWW-Authenticate": "Bearer"},
         )
+
+
+async def require_not_demo(
+    api_config: ApiConfig = Depends(get_api_config),
+) -> None:
+    """Block money-spending endpoints when demo_mode is enabled.
+
+    Applied to /runtime/invoke, /runtime/stream, and POST /tasks so a public
+    try-it deployment can expose the read-only surface without letting anyone
+    drain the budget. Returns 403 when demo_mode is on.
+    """
+    if api_config.demo_mode:
+        raise HTTPException(
+            status_code=403,
+            detail="This endpoint is disabled in demo mode",
+        )

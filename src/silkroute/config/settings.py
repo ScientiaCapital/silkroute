@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from enum import StrEnum
 
-from pydantic import Field, model_validator
+from pydantic import AliasChoices, BaseModel, Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -27,6 +27,10 @@ class HardwareProfile(StrEnum):
     MAC_STUDIO = "mac-studio"
     NVIDIA_SPARK = "nvidia-spark"
     HETZNER_VPS = "hetzner-vps"
+    # Edge orchestrator: an on-prem Raspberry Pi (e.g. the same box already
+    # deployed as an AV switcher). Runs the orchestrator + MCP + dashboard and
+    # delegates inference to cloud/beefier nodes — a 7B on a Pi CPU is unusable.
+    RASPBERRY_PI = "raspberry-pi"
     CUSTOM = "custom"
 
 
@@ -236,11 +240,18 @@ class Context7Config(BaseSettings):
 class ApiConfig(BaseSettings):
     """FastAPI REST layer configuration."""
 
-    model_config = SettingsConfigDict(env_prefix="SILKROUTE_API_")
+    model_config = SettingsConfigDict(env_prefix="SILKROUTE_API_", populate_by_name=True)
 
     host: str = Field(default="0.0.0.0", description="API bind address")
     port: int = Field(default=8787, description="API listen port")
-    api_key: str = Field(default="", description="Bearer token for auth (empty = disabled)")
+    # Accept the documented SILKROUTE_API_KEY. Without an explicit alias the
+    # env_prefix would make the real var SILKROUTE_API_API_KEY, silently leaving
+    # auth disabled for anyone who set the documented name — a security footgun.
+    api_key: str = Field(
+        default="",
+        validation_alias=AliasChoices("SILKROUTE_API_KEY", "SILKROUTE_API_API_KEY"),
+        description="Bearer token for auth (empty = disabled). Set via SILKROUTE_API_KEY.",
+    )
     cors_origins: list[str] = Field(
         default=["http://localhost:3000"],
         description="Allowed CORS origins",
@@ -249,10 +260,41 @@ class ApiConfig(BaseSettings):
     stream_timeout_seconds: int = Field(
         default=300, description="Server-side SSE stream timeout"
     )
+    demo_mode: bool = Field(
+        default=False,
+        description=(
+            "When true, disable money-spending endpoints (/runtime/invoke, "
+            "/runtime/stream, POST /tasks) so a public try-it deployment "
+            "cannot drain the budget. Read-only endpoints stay reachable."
+        ),
+    )
+
+
+class MCPServerConfig(BaseModel):
+    """One upstream MCP tool server the agent connects to as a client.
+
+    The bridge core (``connect_mcp_server``) is server-agnostic; this is the
+    per-server shape it consumes. ``tool_allowlist`` empty = register everything.
+    """
+
+    name: str
+    command: str = Field(default="python", description="Executable that launches the server")
+    args: list[str] = Field(default_factory=list, description="Args passed to the command")
+    env: dict[str, str] = Field(
+        default_factory=dict, description="Extra env merged into the subprocess"
+    )
+    tool_allowlist: list[str] = Field(
+        default_factory=list, description="Subset of tools to register (empty = all)"
+    )
 
 
 class MCPConfig(BaseSettings):
-    """MCP client bridge configuration — connects the agent to an external MCP server."""
+    """MCP client bridge configuration — connects the agent to external MCP servers.
+
+    Historically epiphan-only (the ``epiphan_*`` fields, driven by env vars). The
+    ``servers`` list adds arbitrary additional servers, and ``enabled_servers()``
+    normalizes both into a single list the agent loop iterates.
+    """
 
     model_config = SettingsConfigDict(env_prefix="SILKROUTE_MCP_")
 
@@ -299,6 +341,41 @@ class MCPConfig(BaseSettings):
             "register everything the server exposes."
         ),
     )
+    servers: list[MCPServerConfig] = Field(
+        default_factory=list,
+        description="Additional MCP tool servers to connect, beyond the epiphan preset.",
+    )
+
+    def enabled_servers(self) -> list[MCPServerConfig]:
+        """Normalize all configured servers into one list to connect.
+
+        Combines the epiphan preset (when ``epiphan_enabled``) with any explicit
+        ``servers``. This is the single place that knows the epiphan back-compat
+        shim — the bridge core stays server-agnostic. The epiphan preset comes
+        first so its tools take precedence on name collisions.
+        """
+        result: list[MCPServerConfig] = []
+        if self.epiphan_enabled:
+            env = {
+                k: v
+                for k, v in {
+                    "PEARL_DEVICES": self.epiphan_pearl_devices,
+                    "PEARL_USERNAME": self.epiphan_pearl_username,
+                    "PEARL_PASSWORD": self.epiphan_pearl_password,
+                }.items()
+                if v
+            }
+            result.append(
+                MCPServerConfig(
+                    name="epiphan",
+                    command=self.epiphan_command,
+                    args=self.epiphan_args,
+                    env=env,
+                    tool_allowlist=self.epiphan_tool_allowlist,
+                )
+            )
+        result.extend(self.servers)
+        return result
 
 
 class FinopsConfig(BaseSettings):
@@ -392,6 +469,14 @@ class SilkRouteSettings(BaseSettings):
     context7: Context7Config = Field(default_factory=Context7Config)
 
     # Global
+    environment: str = Field(
+        default="development",
+        description=(
+            "Deployment environment (SILKROUTE_ENVIRONMENT). Set to 'production' "
+            "to enforce auth-on: create_app() refuses to start with an empty "
+            "SILKROUTE_API_KEY. Empty-key dev mode is kept for local development."
+        ),
+    )
     hardware_profile: HardwareProfile = Field(
         default=HardwareProfile.MAC_MINI,
         description="Hardware deployment profile",

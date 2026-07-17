@@ -90,6 +90,14 @@ def create_app(settings: SilkRouteSettings | None = None) -> FastAPI:
 
         settings = load_settings()
 
+    # Fail-fast: never start unauthenticated in production. /runtime/invoke and
+    # /tasks spend real money, so an exposed no-auth instance is an open faucet.
+    if settings.environment == "production" and not settings.api.api_key:
+        raise RuntimeError(
+            "SILKROUTE_API_KEY must be set when SILKROUTE_ENVIRONMENT=production. "
+            "Refusing to start an unauthenticated API that can spend money."
+        )
+
     app = FastAPI(
         title="SilkRoute API",
         description="AI agent orchestrator for Chinese LLMs",
