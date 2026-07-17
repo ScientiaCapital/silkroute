@@ -305,3 +305,30 @@ class ProjectListResponse(BaseModel):
 
     projects: list[ProjectResponse]
     total: int
+
+
+# --- Memory ---
+
+
+class MemoryItem(BaseModel):
+    """A single persistent agent memory."""
+
+    id: int
+    project_id: str | None
+    kind: str
+    content: str
+    importance: float
+    recall_count: int
+    created_at: str
+
+
+class MemoryListResponse(BaseModel):
+    """GET /memories response.
+
+    available=False signals Postgres was unreachable — a fail-open response,
+    not "there are zero memories".
+    """
+
+    items: list[MemoryItem]
+    count: int
+    available: bool = True
