@@ -16,8 +16,19 @@ from silkroute.providers.openrouter import create_openrouter_model
 
 logger = logging.getLogger(__name__)
 
-# Local models get a much smaller file listing (see propose_change).
+# Local models get a much smaller file listing (see propose_change): a few
+# files, each short enough to show complete so the model never guesses at
+# truncated code.
 _LOCAL_MAX_FILES = 4
+_LOCAL_MAX_LINES = 150
+
+
+def _line_count(fp: Path) -> int:
+    """Line count of a file, or a large sentinel if unreadable (so it's skipped)."""
+    try:
+        return len(fp.read_text().splitlines())
+    except OSError:
+        return 10**9
 
 _SYSTEM_TEMPLATE = """\
 {program}
@@ -36,7 +47,9 @@ The JSON must have exactly these fields:
 
 Rules:
 - Propose exactly ONE change per response.
-- The old_code must be an exact substring of the current file contents.
+- old_code MUST be copied verbatim from a file shown below. Prefer the SMALLEST
+  unique snippet — often a single line. Do NOT guess or reconstruct code you
+  cannot see in full; only reference code that appears in the listing.
 - The new_code must be different from old_code.
 - Keep changes under {max_lines} lines of diff.
 - Only modify files within: {allowed_paths}
@@ -99,11 +112,15 @@ async def propose_change(
     )
 
     # Local models (e.g. a 14B) lose output-schema discipline when the prompt
-    # gets large — at ~70KB they abandon the requested JSON shape and emit a
-    # hallucinated structure. Cloud models handle the full listing fine. So we
-    # send far fewer, shorter files to a local researcher.
+    # gets large — at ~70KB they abandon the requested JSON shape. They also
+    # hallucinate old_code for any file shown truncated ("...assume the rest").
+    # So a local researcher gets a few SMALL files shown COMPLETE (never
+    # truncated); cloud models handle the full listing fine.
     if is_local:
-        file_listing = _build_file_listing(target_files[:_LOCAL_MAX_FILES], max_lines_per_file=120)
+        small = [f for f in target_files if _line_count(f) <= _LOCAL_MAX_LINES]
+        file_listing = _build_file_listing(
+            small[:_LOCAL_MAX_FILES], max_lines_per_file=_LOCAL_MAX_LINES,
+        )
     else:
         file_listing = _build_file_listing(target_files)
     user_msg = _USER_TEMPLATE.format(context=context, file_listing=file_listing)
