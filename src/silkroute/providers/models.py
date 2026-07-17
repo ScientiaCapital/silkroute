@@ -1,8 +1,13 @@
-"""Chinese LLM model registry.
+"""Model registry — Chinese-LLM-optimized, model-agnostic.
 
-Defines all supported Chinese models with pricing, capabilities, context windows,
+Defines all supported models with pricing, capabilities, context windows,
 tool-calling support, and routing tier assignments. This is the knowledge base
 that powers SilkRoute's intelligent cost routing.
+
+Default posture is local-first / Chinese for sovereignty and cost, but the
+architecture is provider-neutral: western frontier models (Claude/GPT/Gemini)
+plug in as a one-line ``ModelSpec`` each and route through OpenRouter with no
+router changes (see the WESTERN FRONTIER section below).
 
 Pricing data as of February 2026. Updated monthly.
 """
@@ -16,7 +21,9 @@ from silkroute.config.settings import ModelTier
 
 
 class Provider(StrEnum):
-    """Chinese LLM providers."""
+    """LLM providers. Chinese + local are the default posture; western frontier
+    providers (Anthropic/OpenAI/Google) are supported via the OpenRouter fallback
+    transport and require no router changes."""
 
     DEEPSEEK = "deepseek"
     QWEN = "qwen"
@@ -24,6 +31,10 @@ class Provider(StrEnum):
     MOONSHOT = "moonshotai"
     OPENROUTER = "openrouter"
     OLLAMA = "ollama"
+    # Western frontier — routed via OpenRouter (not in router._DIRECT_PROVIDER_PREFIX)
+    ANTHROPIC = "anthropic"
+    OPENAI = "openai"
+    GOOGLE = "google"
 
 
 class Capability(StrEnum):
@@ -314,6 +325,95 @@ KIMI_K2 = ModelSpec(
 )
 
 # ============================================================================
+# WESTERN FRONTIER MODELS (via OpenRouter — model-agnostic proof)
+# ============================================================================
+# These are NOT the default posture — local/Chinese stay first in every routing
+# chain for sovereignty and cost. They exist to prove the architecture is truly
+# provider-neutral: each is a one-line ModelSpec with provider=ANTHROPIC/OPENAI/
+# GOOGLE (absent from router._DIRECT_PROVIDER_PREFIX), so get_litellm_model_string
+# routes them as "openrouter/{model_id}" with NO router changes. Frontier is
+# opt-in per deployment (needs SILKROUTE_OPENROUTER_API_KEY). Slugs + pricing +
+# context verified 2026-07-17 against https://openrouter.ai/api/v1/models.
+
+CLAUDE_SONNET_5 = ModelSpec(
+    model_id="anthropic/claude-sonnet-5",
+    name="Claude Sonnet 5",
+    provider=Provider.ANTHROPIC,
+    tier=ModelTier.PREMIUM,
+    input_cost_per_m=2.00,
+    output_cost_per_m=10.00,
+    context_window=1_000_000,
+    max_output_tokens=128_000,
+    capabilities=(
+        Capability.CODING,
+        Capability.REASONING,
+        Capability.TOOL_CALLING,
+        Capability.AGENTIC,
+        Capability.LONG_CONTEXT,
+        Capability.MULTIMODAL,
+    ),
+    recommended_for=("frontier_coding", "complex_agentic_workflows", "architecture_decisions"),
+)
+
+GPT_5_6_SOL = ModelSpec(
+    model_id="openai/gpt-5.6-sol",
+    name="GPT-5.6 Sol",
+    provider=Provider.OPENAI,
+    tier=ModelTier.PREMIUM,
+    input_cost_per_m=5.00,
+    output_cost_per_m=30.00,
+    context_window=1_050_000,
+    max_output_tokens=128_000,
+    capabilities=(
+        Capability.CODING,
+        Capability.REASONING,
+        Capability.TOOL_CALLING,
+        Capability.AGENTIC,
+        Capability.LONG_CONTEXT,
+        Capability.MULTIMODAL,
+        Capability.MATH,
+    ),
+    recommended_for=("frontier_reasoning", "hardest_debugging", "research"),
+)
+
+GEMINI_3_5_FLASH = ModelSpec(
+    model_id="google/gemini-3.5-flash",
+    name="Gemini 3.5 Flash",
+    provider=Provider.GOOGLE,
+    tier=ModelTier.STANDARD,
+    input_cost_per_m=1.50,
+    output_cost_per_m=9.00,
+    context_window=1_048_576,
+    max_output_tokens=65_536,
+    capabilities=(
+        Capability.CODING,
+        Capability.REASONING,
+        Capability.TOOL_CALLING,
+        Capability.LONG_CONTEXT,
+        Capability.MULTIMODAL,
+    ),
+    recommended_for=("long_context_analysis", "multimodal_tasks", "fast_general_purpose"),
+)
+
+GPT_5_6_LUNA = ModelSpec(
+    model_id="openai/gpt-5.6-luna",
+    name="GPT-5.6 Luna",
+    provider=Provider.OPENAI,
+    tier=ModelTier.STANDARD,
+    input_cost_per_m=1.00,
+    output_cost_per_m=6.00,
+    context_window=1_050_000,
+    max_output_tokens=128_000,
+    capabilities=(
+        Capability.CODING,
+        Capability.TOOL_CALLING,
+        Capability.AGENTIC,
+        Capability.LONG_CONTEXT,
+    ),
+    recommended_for=("cost_efficient_frontier", "daily_agent_ops", "tool_heavy_tasks"),
+)
+
+# ============================================================================
 # LOCAL MODELS (Ollama — zero API cost)
 # ============================================================================
 
@@ -454,6 +554,11 @@ ALL_MODELS: dict[str, ModelSpec] = {
     QWEN3_CODER.model_id: QWEN3_CODER,
     GLM_5.model_id: GLM_5,
     KIMI_K2.model_id: KIMI_K2,
+    # Western frontier (via OpenRouter — opt-in, model-agnostic proof)
+    CLAUDE_SONNET_5.model_id: CLAUDE_SONNET_5,
+    GPT_5_6_SOL.model_id: GPT_5_6_SOL,
+    GEMINI_3_5_FLASH.model_id: GEMINI_3_5_FLASH,
+    GPT_5_6_LUNA.model_id: GPT_5_6_LUNA,
     # Local
     QWEN3_30B_LOCAL.model_id: QWEN3_30B_LOCAL,
     GLM_4_9B_LOCAL.model_id: GLM_4_9B_LOCAL,
@@ -480,12 +585,18 @@ MODELS_BY_TIER: dict[ModelTier, list[ModelSpec]] = {
         QWEN3_235B,
         QWEN3_30B,
         GLM_47,
+        # Western frontier (opt-in; listed after Chinese to keep local-first posture)
+        GEMINI_3_5_FLASH,
+        GPT_5_6_LUNA,
     ],
     ModelTier.PREMIUM: [
         DEEPSEEK_R1,
         QWEN3_CODER,
         GLM_5,
         KIMI_K2,
+        # Western frontier (opt-in; listed after Chinese to keep local-first posture)
+        CLAUDE_SONNET_5,
+        GPT_5_6_SOL,
     ],
 }
 
@@ -503,12 +614,18 @@ DEFAULT_ROUTING: dict[ModelTier, list[str]] = {
         "qwen/qwen3-235b-a22b-2507",
         "z-ai/glm-4.7",
         "qwen/qwen3-30b-a3b",
+        # Western frontier last — opt-in fallback, keeps Chinese/local first
+        "google/gemini-3.5-flash",
+        "openai/gpt-5.6-luna",
     ],
     ModelTier.PREMIUM: [
         "deepseek/deepseek-r1-0528",
         "qwen/qwen3-coder",
         "z-ai/glm-5",
         "moonshotai/kimi-k2",
+        # Western frontier last — opt-in fallback, keeps Chinese/local first
+        "anthropic/claude-sonnet-5",
+        "openai/gpt-5.6-sol",
     ],
 }
 
