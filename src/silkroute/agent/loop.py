@@ -189,28 +189,23 @@ async def run_agent(
     if pool is not None and memory_config.enabled:
         registry.register(make_remember_tool(pool, project_id, session.id))
 
-    # MCP bridge (optional — non-fatal if the server or dependency is unavailable)
-    mcp_stack = None
-    mcp_config = MCPConfig()
-    if mcp_config.epiphan_enabled:
+    # MCP bridge (optional — non-fatal if a server or dependency is unavailable).
+    # Connect every configured upstream server (epiphan preset + explicit ones).
+    mcp_stacks: list[Any] = []
+    mcp_servers = MCPConfig().enabled_servers()
+    if mcp_servers:
         from silkroute.mcp_bridge.client import connect_mcp_server
 
-        subprocess_env = {
-            k: v
-            for k, v in {
-                "PEARL_DEVICES": mcp_config.epiphan_pearl_devices,
-                "PEARL_USERNAME": mcp_config.epiphan_pearl_username,
-                "PEARL_PASSWORD": mcp_config.epiphan_pearl_password,
-            }.items()
-            if v
-        }
-        mcp_stack = await connect_mcp_server(
-            registry,
-            command=mcp_config.epiphan_command,
-            args=mcp_config.epiphan_args,
-            env=subprocess_env,
-            tool_allowlist=mcp_config.epiphan_tool_allowlist or None,
-        )
+        for server_cfg in mcp_servers:
+            stack = await connect_mcp_server(
+                registry,
+                command=server_cfg.command,
+                args=server_cfg.args,
+                env=server_cfg.env,
+                tool_allowlist=server_cfg.tool_allowlist or None,
+            )
+            if stack is not None:
+                mcp_stacks.append(stack)
 
     tools = registry.to_openai_tools()
 
@@ -403,8 +398,8 @@ async def run_agent(
         if not daemon_mode:
             console.print(f"\n  [yellow]Max iterations ({max_iterations}) reached.[/yellow]")
 
-    # Close the MCP bridge, if one was opened
-    if mcp_stack is not None:
+    # Close every MCP bridge that was opened
+    for mcp_stack in mcp_stacks:
         await mcp_stack.aclose()
 
     # Flush pending DB writes and close session

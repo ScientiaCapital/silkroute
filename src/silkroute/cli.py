@@ -506,6 +506,59 @@ def supervisor_ralph(once: bool) -> None:
 
 
 @main.group()
+def mcp() -> None:
+    """Model Context Protocol — serve SilkRoute's tools to other agents."""
+    pass
+
+
+@mcp.command("serve")
+@click.option("--name", default="silkroute", help="MCP server name advertised to clients")
+@click.option(
+    "--allow",
+    "allow",
+    multiple=True,
+    help="Add a tool to the export allowlist (repeatable). Adds to the safe read-only default.",
+)
+@click.option(
+    "--all",
+    "expose_all",
+    is_flag=True,
+    help="Export ALL built-in tools, including shell_exec/write_file (UNSAFE — remote code exec).",
+)
+@click.option(
+    "--workspace",
+    default=None,
+    help="Sandbox workspace dir for shell/file tools (only relevant with --allow/--all).",
+)
+def mcp_serve(name: str, allow: tuple[str, ...], expose_all: bool, workspace: str | None) -> None:
+    """Serve SilkRoute's ToolRegistry as an MCP server over stdio.
+
+    Default export policy is READ-ONLY (no shell_exec/write_file/http_request).
+    Use --allow to opt specific tools in, or --all to expose everything (unsafe).
+    stdout is the MCP protocol channel — status is written to stderr.
+    """
+    import asyncio
+    import contextlib
+
+    from silkroute.agent.tools import create_default_registry
+    from silkroute.mcp_bridge.server import DEFAULT_EXPORT_ALLOWLIST, serve_stdio
+
+    registry = create_default_registry(workspace_dir=workspace)
+
+    export_allowlist: set[str] | None
+    if expose_all:
+        export_allowlist = set(registry.tool_names)
+        click.echo("WARNING: exporting ALL tools incl. shell/write — unsafe.", err=True)
+    elif allow:
+        export_allowlist = set(DEFAULT_EXPORT_ALLOWLIST) | set(allow)
+    else:
+        export_allowlist = None  # safe read-only default
+
+    with contextlib.suppress(KeyboardInterrupt):
+        asyncio.run(serve_stdio(registry, name=name, export_allowlist=export_allowlist))
+
+
+@main.group()
 def research() -> None:
     """Autonomous code research and improvement (autoresearch)."""
     pass
