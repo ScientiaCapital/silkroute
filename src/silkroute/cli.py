@@ -521,7 +521,7 @@ def research() -> None:
 @click.option(
     "--model", "-m",
     default="deepseek/deepseek-v3.2",
-    help="OpenRouter model ID for the researcher agent",
+    help='Researcher model: OpenRouter slug, or "ollama/qwen2.5:14b" for fully local',
 )
 @click.option(
     "--max-experiments",
@@ -534,12 +534,31 @@ def research() -> None:
     default="default",
     help="Project ID for memory persistence (agent_memories)",
 )
-def research_start(target: str, model: str, max_experiments: int, project: str) -> None:
+@click.option(
+    "--hours",
+    default=0.0,
+    type=float,
+    help="Wall-clock cap for the whole run in hours (0 = unlimited)",
+)
+@click.option(
+    "--experiment-timeout",
+    default=600,
+    type=int,
+    help="Per-experiment timeout in seconds (0 = no cap)",
+)
+def research_start(
+    target: str,
+    model: str,
+    max_experiments: int,
+    project: str,
+    hours: float,
+    experiment_timeout: int,
+) -> None:
     """Start the autoresearch experiment loop.
 
-    Runs forever (or up to --max-experiments) on a dedicated git branch.
-    The Chinese LLM researcher proposes changes, evaluates them via pytest,
-    and keeps improvements. Press Ctrl+C for graceful shutdown.
+    Runs forever (or up to --max-experiments / --hours) on a dedicated git
+    branch. The researcher proposes changes, evaluates them via pytest, and
+    keeps improvements. Press Ctrl+C for graceful shutdown.
     """
     import asyncio
     from pathlib import Path
@@ -560,6 +579,8 @@ def research_start(target: str, model: str, max_experiments: int, project: str) 
         project_root=project_root,
         max_experiments=max_experiments,
         project_id=project,
+        experiment_timeout_seconds=experiment_timeout,
+        max_hours=hours,
     )
 
     try:

@@ -1,4 +1,9 @@
-"""LLM interaction — propose code changes via Chinese LLMs through OpenRouter."""
+"""LLM interaction — propose code changes via Chinese LLMs.
+
+The researcher runs through OpenRouter by default, or fully local via Ollama
+when the model id starts with "ollama/" (e.g. "ollama/qwen2.5:14b") — a $0,
+zero-cloud research loop, matching how agent/loop.py reaches local models.
+"""
 
 from __future__ import annotations
 
@@ -68,7 +73,8 @@ async def propose_change(
     """Ask a Chinese LLM to propose one code change.
 
     Args:
-        model_id: OpenRouter model identifier.
+        model_id: Model identifier. An OpenRouter slug (e.g. "deepseek/deepseek-v3.2"),
+            or "ollama/<model>" for fully-local inference (no cloud, no API key).
         program: Contents of the program.md file.
         context: Current state (test output, coverage, recent history).
         target_files: Files the agent can see and edit.
@@ -81,12 +87,6 @@ async def propose_change(
     Raises:
         ValueError: If the LLM response can't be parsed as valid JSON.
     """
-    llm = create_openrouter_model(
-        model_id=model_id,
-        temperature=0.7,  # Creative exploration, not deterministic
-        max_tokens=4096,
-    )
-
     system_msg = _SYSTEM_TEMPLATE.format(
         program=program,
         max_lines=max_diff_lines,
@@ -101,12 +101,41 @@ async def propose_change(
         {"role": "user", "content": user_msg},
     ]
 
-    response = await llm.ainvoke(messages)
-    content = response.content
-    if not isinstance(content, str):
-        content = str(content)
+    if model_id.startswith("ollama/"):
+        content = await _invoke_ollama(model_id, messages)
+    else:
+        llm = create_openrouter_model(
+            model_id=model_id,
+            temperature=0.7,  # Creative exploration, not deterministic
+            max_tokens=4096,
+        )
+        response = await llm.ainvoke(messages)
+        content = response.content
+        if not isinstance(content, str):
+            content = str(content)
 
     return _parse_response(content)
+
+
+async def _invoke_ollama(model_id: str, messages: list[dict]) -> str:
+    """Call a local Ollama model via litellm. No API key, no cloud.
+
+    Mirrors agent/loop.py's litellm usage; api_base honors SILKROUTE_OLLAMA_BASE_URL.
+    """
+    import litellm
+
+    from silkroute.config.settings import ProviderConfig
+
+    litellm.suppress_debug_info = True
+    response = await litellm.acompletion(
+        model=model_id,
+        messages=messages,
+        api_base=ProviderConfig().ollama_base_url,
+        temperature=0.7,
+        max_tokens=4096,
+        response_format={"type": "json_object"},  # litellm maps to Ollama format:json
+    )
+    return response.choices[0].message.content or ""
 
 
 def _build_file_listing(files: list[Path], max_lines_per_file: int = 200) -> str:
@@ -145,7 +174,20 @@ def _parse_response(content: str) -> ProposedChange:
     try:
         data = json.loads(text)
     except json.JSONDecodeError as e:
-        raise ValueError(f"LLM response is not valid JSON: {e}\nResponse: {text[:500]}") from e
+        # Local models often prepend prose ("Here is the JSON: {...}"). Retry on
+        # the outermost {...} span before giving up.
+        start, end = text.find("{"), text.rfind("}")
+        if start != -1 and end > start:
+            try:
+                data = json.loads(text[start : end + 1])
+            except json.JSONDecodeError:
+                raise ValueError(
+                    f"LLM response is not valid JSON: {e}\nResponse: {text[:500]}"
+                ) from e
+        else:
+            raise ValueError(
+                f"LLM response is not valid JSON: {e}\nResponse: {text[:500]}"
+            ) from e
 
     required = {"file_path", "old_code", "new_code", "rationale"}
     missing = required - set(data.keys())

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -9,7 +10,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from silkroute.autoresearch.ledger import Ledger, LedgerEntry
-from silkroute.autoresearch.llm import ProposedChange, _parse_response
+from silkroute.autoresearch.llm import ProposedChange, _parse_response, propose_change
 from silkroute.autoresearch.metrics import Metrics
 from silkroute.autoresearch.program import list_programs, load_program
 
@@ -205,6 +206,80 @@ class TestParseResponse:
         })
         with pytest.raises(ValueError, match="no-op"):
             _parse_response(response)
+
+    def test_extracts_embedded_json(self) -> None:
+        # Local models love to prepend prose before the JSON.
+        response = (
+            'Sure! Here is the JSON for my proposed change:\n'
+            '{"file_path": "a.py", "old_code": "x", "new_code": "y", "rationale": "fix"}\n'
+            'Let me know if you need anything else.'
+        )
+        change = _parse_response(response)
+        assert change.file_path == "a.py"
+        assert change.rationale == "fix"
+
+
+# ── Ollama researcher path ───────────────────────────────────────────
+
+
+class TestOllamaResearcher:
+    @pytest.mark.asyncio
+    async def test_ollama_uses_litellm_no_api_key(self, tmp_path: Path, monkeypatch) -> None:
+        monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+        monkeypatch.delenv("SILKROUTE_OPENROUTER_API_KEY", raising=False)
+
+        f = tmp_path / "mod.py"
+        f.write_text("def foo():\n    pass\n")
+
+        canned = json.dumps({
+            "file_path": "mod.py", "old_code": "pass", "new_code": "return 1",
+            "rationale": "return a value",
+        })
+        fake_response = MagicMock()
+        fake_response.choices = [MagicMock(message=MagicMock(content=canned))]
+
+        with patch("litellm.acompletion", new_callable=AsyncMock, return_value=fake_response) as mock_acomp:
+            change = await propose_change(
+                model_id="ollama/qwen2.5:14b",
+                program="be a researcher",
+                context="ctx",
+                target_files=[f],
+                allowed_paths=["src/"],
+                max_diff_lines=50,
+            )
+
+        assert change.file_path == "mod.py"
+        _, kwargs = mock_acomp.call_args
+        assert kwargs["model"] == "ollama/qwen2.5:14b"
+        assert kwargs["api_base"] == "http://localhost:11434"
+        assert "api_key" not in kwargs
+
+    @pytest.mark.asyncio
+    async def test_openrouter_path_unchanged(self, tmp_path: Path) -> None:
+        from silkroute.autoresearch import llm as llm_mod
+
+        f = tmp_path / "mod.py"
+        f.write_text("def foo():\n    pass\n")
+
+        canned = json.dumps({
+            "file_path": "mod.py", "old_code": "pass", "new_code": "return 1",
+            "rationale": "return a value",
+        })
+        fake_llm = MagicMock()
+        fake_llm.ainvoke = AsyncMock(return_value=MagicMock(content=canned))
+
+        with patch.object(llm_mod, "create_openrouter_model", return_value=fake_llm) as mock_create:
+            change = await propose_change(
+                model_id="deepseek/deepseek-v3.2",
+                program="be a researcher",
+                context="ctx",
+                target_files=[f],
+                allowed_paths=["src/"],
+                max_diff_lines=50,
+            )
+
+        assert change.rationale == "return a value"
+        mock_create.assert_called_once()
 
 
 # ── Program Loading ──────────────────────────────────────────────────
@@ -407,6 +482,306 @@ class TestEngine:
         entries = engine.ledger.read()
         crash_entries = [e for e in entries if e.status == "crash"]
         assert len(crash_entries) == 3
+
+
+# ── Eval caching (#24) ───────────────────────────────────────────────
+
+
+_COMBINED_PYTEST_OUTPUT = (
+    "........F.\n"
+    "FAILED tests/test_x.py::test_y - assert False\n"
+    "Name                        Stmts   Miss  Cover   Missing\n"
+    "---------------------------------------------------------\n"
+    "src/silkroute/foo.py          100     30    70%   1-30\n"
+    "src/silkroute/bar.py           50      5    90%   1-5\n"
+    "---------------------------------------------------------\n"
+    "TOTAL                         150     35    77%\n"
+    "9 passed, 1 failed\n"
+)
+
+
+def _make_fake_proc(stdout: str = _COMBINED_PYTEST_OUTPUT) -> MagicMock:
+    proc = MagicMock()
+    proc.communicate = AsyncMock(return_value=(stdout.encode(), b""))
+    proc.returncode = 0
+    return proc
+
+
+def _pytest_calls(mock_exec: AsyncMock) -> list:
+    return [c for c in mock_exec.call_args_list if "pytest" in c.args]
+
+
+class TestEvalCaching:
+    @pytest.mark.asyncio
+    async def test_evaluate_then_build_context_single_pytest_run(self, tmp_path: Path) -> None:
+        from silkroute.autoresearch.targets.code import CodeImproverTarget
+
+        target = CodeImproverTarget(tmp_path)
+
+        with patch(
+            "silkroute.autoresearch.targets.code.asyncio.create_subprocess_exec",
+            new_callable=AsyncMock, side_effect=lambda *a, **kw: _make_fake_proc(),
+        ) as mock_exec, \
+             patch.object(target, "_build_memory_section", new=AsyncMock(return_value="")):
+            await target.evaluate()
+            context = await target.build_context([])
+
+        assert len(_pytest_calls(mock_exec)) == 1
+        assert "## Current Test Status" in context
+
+    @pytest.mark.asyncio
+    async def test_build_context_falls_back_when_cache_cold(self, tmp_path: Path) -> None:
+        from silkroute.autoresearch.targets.code import CodeImproverTarget
+
+        target = CodeImproverTarget(tmp_path)
+
+        with patch(
+            "silkroute.autoresearch.targets.code.asyncio.create_subprocess_exec",
+            new_callable=AsyncMock, side_effect=lambda *a, **kw: _make_fake_proc(),
+        ) as mock_exec, \
+             patch.object(target, "_build_memory_section", new=AsyncMock(return_value="")):
+            await target.build_context([])
+
+        assert len(_pytest_calls(mock_exec)) == 1
+
+    @pytest.mark.asyncio
+    async def test_invalidate_forces_rerun(self, tmp_path: Path) -> None:
+        from silkroute.autoresearch.targets.code import CodeImproverTarget
+
+        target = CodeImproverTarget(tmp_path)
+
+        with patch(
+            "silkroute.autoresearch.targets.code.asyncio.create_subprocess_exec",
+            new_callable=AsyncMock, side_effect=lambda *a, **kw: _make_fake_proc(),
+        ) as mock_exec, \
+             patch.object(target, "_build_memory_section", new=AsyncMock(return_value="")):
+            await target.evaluate()
+            target.invalidate_eval_cache()
+            await target.build_context([])
+
+        assert len(_pytest_calls(mock_exec)) == 2
+
+    @pytest.mark.asyncio
+    async def test_summary_excludes_coverage_table(self, tmp_path: Path) -> None:
+        from silkroute.autoresearch.targets.code import CodeImproverTarget
+
+        target = CodeImproverTarget(tmp_path)
+        # Pad with 40 coverage rows so the raw last-30 window would be all coverage
+        padded = (
+            "9 passed, 1 failed\n"
+            + "\n".join(f"src/silkroute/mod{i}.py   100  30   70%   1-30" for i in range(40))
+            + "\nTOTAL  4000  1200  70%\n"
+        )
+        target._last_eval_output = padded
+
+        summary = await target._get_test_summary()
+        assert "9 passed, 1 failed" in summary
+        assert "src/silkroute/mod5.py" not in summary
+
+    @pytest.mark.asyncio
+    async def test_coverage_gaps_parse_from_cache(self, tmp_path: Path) -> None:
+        from silkroute.autoresearch.targets.code import CodeImproverTarget
+
+        target = CodeImproverTarget(tmp_path)
+        target._last_eval_output = _COMBINED_PYTEST_OUTPUT
+
+        gaps = await target._get_coverage_gaps()
+        assert "src/silkroute/foo.py" in gaps   # 70% < 80
+        assert "src/silkroute/bar.py" not in gaps  # 90%
+
+    def test_parse_pytest_output(self) -> None:
+        from silkroute.autoresearch.targets.code import CodeImproverTarget
+
+        result, cov = CodeImproverTarget._parse_pytest_output(_COMBINED_PYTEST_OUTPUT)
+        assert result["passed"] == 9
+        assert result["failed"] == 1
+        assert result["pass_rate"] == pytest.approx(0.9)
+        assert cov == pytest.approx(0.77)
+
+
+# ── Wall-clock budgets + simplicity keeps ────────────────────────────
+
+
+def _metrics(pass_rate: float, cov: float = 0.5) -> Metrics:
+    return Metrics(
+        pass_rate=pass_rate, coverage_pct=cov, lint_clean=True,
+        total_tests=100, tests_passed=int(pass_rate * 100),
+        tests_failed=100 - int(pass_rate * 100), error_summary="",
+    )
+
+
+def _budget_target() -> MagicMock:
+    target = MagicMock()
+    target.name = "code"
+    target.allowed_paths = ["src/"]
+    target.max_diff_lines = 50
+    target.get_editable_files = MagicMock(return_value=[])
+    target.build_context = AsyncMock(return_value="context")
+    target.invalidate_eval_cache = MagicMock()
+    return target
+
+
+class TestBudgetsAndSimplicity:
+    @pytest.mark.asyncio
+    async def test_hours_cap_stops_loop(self, tmp_path: Path) -> None:
+        from silkroute.autoresearch.engine import ResearchEngine
+
+        target = _budget_target()
+        target.evaluate = AsyncMock(return_value=_metrics(0.8))
+
+        engine = ResearchEngine(
+            target=target, model_id="test-model", project_root=tmp_path,
+            max_experiments=10, max_hours=1.0,
+        )
+
+        import silkroute.db.pool as pool_mod
+        pool_mod._pool = None
+
+        with patch.object(engine, "_create_branch", return_value="autoresearch/test"), \
+             patch.object(engine, "_git_short_hash", return_value="abc1234"), \
+             patch.object(engine, "_setup_signal_handlers"), \
+             patch("silkroute.autoresearch.engine.time.monotonic",
+                   side_effect=[0.0, 9_999_999.0]), \
+             patch("silkroute.db.pool.asyncpg.create_pool",
+                   new_callable=AsyncMock, side_effect=OSError("no db")):
+            await engine.run()
+
+        pool_mod._pool = None
+
+        # Only the baseline row — the cap tripped before any experiment ran.
+        entries = engine.ledger.read()
+        assert len(entries) == 1
+        assert entries[0].description == "baseline"
+
+    @pytest.mark.asyncio
+    async def test_experiment_timeout_records_crash(self, tmp_path: Path) -> None:
+        from silkroute.autoresearch.engine import ResearchEngine
+
+        target = _budget_target()
+
+        # First evaluate() = baseline (fast); second = the hanging experiment.
+        calls = {"n": 0}
+
+        async def _evaluate() -> Metrics:
+            calls["n"] += 1
+            if calls["n"] == 1:
+                return _metrics(0.8)
+            await asyncio.sleep(5)
+            return _metrics(0.9)
+
+        target.evaluate = _evaluate
+
+        engine = ResearchEngine(
+            target=target, model_id="test-model", project_root=tmp_path,
+            max_experiments=1, experiment_timeout_seconds=0.05,
+        )
+
+        import silkroute.db.pool as pool_mod
+        pool_mod._pool = None
+
+        with patch.object(engine, "_create_branch", return_value="autoresearch/test"), \
+             patch.object(engine, "_git_short_hash", return_value="def5678"), \
+             patch.object(engine, "_git_commit", return_value="def5678"), \
+             patch.object(engine, "_git_reset") as mock_reset, \
+             patch.object(engine, "_revert_if_dirty"), \
+             patch.object(engine, "_setup_signal_handlers"), \
+             patch("silkroute.autoresearch.engine.propose_change", new_callable=AsyncMock) as mock_propose, \
+             patch.object(engine, "_validate_change"), \
+             patch.object(engine, "_apply_change"), \
+             patch("silkroute.db.pool.asyncpg.create_pool",
+                   new_callable=AsyncMock, side_effect=OSError("no db")):
+            mock_propose.return_value = ProposedChange(
+                file_path="src/test.py", old_code="old", new_code="new", rationale="slow one",
+            )
+            await engine.run()
+
+        pool_mod._pool = None
+
+        entries = engine.ledger.read()
+        crash = [e for e in entries if e.status == "crash"]
+        assert len(crash) == 1
+        assert "timeout" in crash[0].description
+        # Pending commit rolled back: HEAD == pending hash → _git_reset called.
+        mock_reset.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_equal_score_smaller_diff_kept_as_simplify(self, tmp_path: Path) -> None:
+        from silkroute.autoresearch.engine import ResearchEngine
+
+        target = _budget_target()
+        # Baseline and candidate score identically.
+        target.evaluate = AsyncMock(side_effect=[_metrics(0.8), _metrics(0.8)])
+
+        engine = ResearchEngine(
+            target=target, model_id="test-model", project_root=tmp_path, max_experiments=1,
+        )
+
+        import silkroute.db.pool as pool_mod
+        pool_mod._pool = None
+
+        with patch.object(engine, "_create_branch", return_value="autoresearch/test"), \
+             patch.object(engine, "_git_short_hash", return_value="def5678"), \
+             patch.object(engine, "_git_commit", return_value="def5678"), \
+             patch.object(engine, "_git_reset") as mock_reset, \
+             patch.object(engine, "_setup_signal_handlers"), \
+             patch("silkroute.autoresearch.engine.propose_change", new_callable=AsyncMock) as mock_propose, \
+             patch.object(engine, "_validate_change"), \
+             patch.object(engine, "_apply_change"), \
+             patch("silkroute.db.pool.asyncpg.create_pool",
+                   new_callable=AsyncMock, side_effect=OSError("no db")):
+            mock_propose.return_value = ProposedChange(
+                file_path="src/test.py",
+                old_code="line1\nline2\nline3\n",
+                new_code="line1\n",
+                rationale="collapse three lines to one",
+            )
+            await engine.run()
+
+        pool_mod._pool = None
+
+        mock_reset.assert_not_called()
+        entries = engine.ledger.read()
+        assert entries[1].status == "keep"
+        assert entries[1].description.startswith("simplify: ")
+
+    @pytest.mark.asyncio
+    async def test_equal_score_larger_diff_discarded(self, tmp_path: Path) -> None:
+        from silkroute.autoresearch.engine import ResearchEngine
+
+        target = _budget_target()
+        target.evaluate = AsyncMock(side_effect=[_metrics(0.8), _metrics(0.8)])
+
+        engine = ResearchEngine(
+            target=target, model_id="test-model", project_root=tmp_path, max_experiments=1,
+        )
+
+        import silkroute.db.pool as pool_mod
+        pool_mod._pool = None
+
+        with patch.object(engine, "_create_branch", return_value="autoresearch/test"), \
+             patch.object(engine, "_git_short_hash", return_value="def5678"), \
+             patch.object(engine, "_git_commit", return_value="def5678"), \
+             patch.object(engine, "_git_reset") as mock_reset, \
+             patch.object(engine, "_setup_signal_handlers"), \
+             patch("silkroute.autoresearch.engine.propose_change", new_callable=AsyncMock) as mock_propose, \
+             patch.object(engine, "_validate_change"), \
+             patch.object(engine, "_apply_change"), \
+             patch("silkroute.db.pool.asyncpg.create_pool",
+                   new_callable=AsyncMock, side_effect=OSError("no db")):
+            mock_propose.return_value = ProposedChange(
+                file_path="src/test.py",
+                old_code="line1\n",
+                new_code="line1\nline2\nline3\n",
+                rationale="add complexity, same score",
+            )
+            await engine.run()
+
+        pool_mod._pool = None
+
+        mock_reset.assert_called_once()
+        target.invalidate_eval_cache.assert_called()
+        entries = engine.ledger.read()
+        assert entries[1].status == "discard"
 
 
 # ── Engine ↔ agent_memories bridge ───────────────────────────────────
