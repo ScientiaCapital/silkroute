@@ -30,6 +30,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <NavLink href="/models" label="Models" icon="🤖" />
           <NavLink href="/budget" label="Budget" icon="💰" />
           <NavLink href="/tasks" label="Task History" icon="📋" />
+          <NavLink href="/demo" label="AV/Edge Demo" icon="🎥" />
           <div className="mt-auto px-4 py-3 text-xs text-neutral-600">
             v0.1.0
           </div>

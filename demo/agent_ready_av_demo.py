@@ -11,8 +11,9 @@ What this proves:
     independently swappable
 
 Usage:
-    python demo/agent_ready_av_demo.py --mock-pearl
-    python demo/agent_ready_av_demo.py --mock-pearl --model ollama/qwen2.5:32b
+    python demo/agent_ready_av_demo.py --mock-mcp     # fully self-contained (no external repo)
+    python demo/agent_ready_av_demo.py --mock-pearl   # mock Pearl HTTP + real epiphan-mcp-server
+    python demo/agent_ready_av_demo.py --mock-mcp --model ollama/qwen2.5:32b
     python demo/agent_ready_av_demo.py  # against the real, live Pearl fleet
 """
 
@@ -41,9 +42,16 @@ DEFAULT_EPIPHAN_PYTHON = str(
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
+        "--mock-mcp",
+        action="store_true",
+        help="Fully self-contained: use the vendored mock epiphan MCP server "
+        "(no external epiphan-mcp-server repo, no HTTP). Best for a first-touch demo.",
+    )
+    parser.add_argument(
         "--mock-pearl",
         action="store_true",
-        help="Serve canned Pearl API responses instead of hitting a real fleet",
+        help="Serve canned Pearl API responses instead of hitting a real fleet "
+        "(still requires the external epiphan-mcp-server via --epiphan-python)",
     )
     parser.add_argument("--model", default=DEFAULT_MODEL, help=f"default: {DEFAULT_MODEL}")
     parser.add_argument(
@@ -65,30 +73,41 @@ def parse_args() -> argparse.Namespace:
 
 
 async def _amain(args: argparse.Namespace) -> None:
+    import json
+
     from silkroute.agent.loop import run_agent
 
     mock_server = None
-    pearl_devices = args.pearl_devices
-
-    if args.mock_pearl:
-        from pearl_mock_server import start_mock_pearl_server
-
-        mock_server, port = start_mock_pearl_server()
-        pearl_devices = f"127.0.0.1:{port}"
-        print(f"[demo] mock Pearl fleet listening on {pearl_devices}")
-    elif not pearl_devices:
-        print(
-            "[demo] --pearl-devices not set and --mock-pearl not passed — "
-            "falling back to whatever PEARL_DEVICES is already in the environment.",
-        )
-
-    os.environ["SILKROUTE_MCP_EPIPHAN_ENABLED"] = "true"
-    os.environ["SILKROUTE_MCP_EPIPHAN_COMMAND"] = args.epiphan_python
-    if pearl_devices:
-        os.environ["SILKROUTE_MCP_EPIPHAN_PEARL_DEVICES"] = pearl_devices
-    os.environ["SILKROUTE_MCP_EPIPHAN_PEARL_USERNAME"] = args.pearl_username
-    os.environ["SILKROUTE_MCP_EPIPHAN_PEARL_PASSWORD"] = args.pearl_password
     os.environ.setdefault("SILKROUTE_OLLAMA_ENABLED", "true")
+
+    if args.mock_mcp:
+        # Fully self-contained: point the bridge at the vendored stub, run with
+        # silkroute's own interpreter. No external repo, no HTTP, no creds.
+        stub_path = str(Path(__file__).parent / "mock_epiphan_mcp.py")
+        os.environ["SILKROUTE_MCP_EPIPHAN_ENABLED"] = "true"
+        os.environ["SILKROUTE_MCP_EPIPHAN_COMMAND"] = sys.executable
+        os.environ["SILKROUTE_MCP_EPIPHAN_ARGS"] = json.dumps([stub_path])
+        print("[demo] using vendored mock epiphan MCP server (fully self-contained)")
+    else:
+        pearl_devices = args.pearl_devices
+        if args.mock_pearl:
+            from pearl_mock_server import start_mock_pearl_server
+
+            mock_server, port = start_mock_pearl_server()
+            pearl_devices = f"127.0.0.1:{port}"
+            print(f"[demo] mock Pearl fleet listening on {pearl_devices}")
+        elif not pearl_devices:
+            print(
+                "[demo] --pearl-devices not set and neither --mock-mcp nor --mock-pearl passed — "
+                "falling back to whatever PEARL_DEVICES is already in the environment.",
+            )
+
+        os.environ["SILKROUTE_MCP_EPIPHAN_ENABLED"] = "true"
+        os.environ["SILKROUTE_MCP_EPIPHAN_COMMAND"] = args.epiphan_python
+        if pearl_devices:
+            os.environ["SILKROUTE_MCP_EPIPHAN_PEARL_DEVICES"] = pearl_devices
+        os.environ["SILKROUTE_MCP_EPIPHAN_PEARL_USERNAME"] = args.pearl_username
+        os.environ["SILKROUTE_MCP_EPIPHAN_PEARL_PASSWORD"] = args.pearl_password
 
     try:
         session = await run_agent(task=args.question, model_override=args.model)

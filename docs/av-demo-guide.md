@@ -5,13 +5,28 @@ by calling [epiphan-mcp-server](https://github.com/ScientiaCapital/epiphan-mcp-s
 directly over MCP — no cloud dependency anywhere in the loop. This guide covers running it with
 different local models and what shows up on the model-finops dashboard once telemetry is wired.
 
-## Prerequisites
+## Quickstart (fully self-contained — no external repo)
+
+```bash
+ollama pull qwen2.5:14b
+python demo/agent_ready_av_demo.py --mock-mcp
+```
+
+`--mock-mcp` points the MCP bridge at the vendored `demo/mock_epiphan_mcp.py` — a tiny MCP server
+that serves the 7 Pearl tools from canned Pearl-2-Room320B data. Nothing but silkroute + Ollama is
+required: no `epiphan-mcp-server` clone, no Pearl hardware, no HTTP layer. This is the recommended
+first-touch demo and mirrors what the dashboard's **AV/Edge Demo** page (`/demo`) visualizes.
+
+Use `--mock-pearl` (below) or the live path only when you specifically want the *real*
+`epiphan-mcp-server` in the loop.
+
+## Prerequisites (for `--mock-pearl` / live hardware only)
 
 - [Ollama](https://ollama.com) installed and `ollama serve` running.
 - `epiphan-mcp-server` cloned as a sibling directory to `silkroute` (both under the same parent
   folder), with its own venv set up (`python -m venv .venv && pip install -e ".[dev]"`) — the
   demo script defaults to `../epiphan-mcp-server/.venv/bin/python` (override with
-  `--epiphan-python` if your layout differs).
+  `--epiphan-python` if your layout differs). Not needed for `--mock-mcp`.
 - Real Pearl fleet credentials (`PEARL_DEVICES`/`PEARL_USERNAME`/`PEARL_PASSWORD`) if you want to
   run against live hardware instead of `--mock-pearl`.
 - (Optional, for telemetry) model-finops running locally or reachable at some URL, with
