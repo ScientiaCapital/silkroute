@@ -8,6 +8,7 @@ Inspired by Karpathy's autoresearch: modify → run → eval → keep/discard.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 import signal
 import subprocess
@@ -352,6 +353,15 @@ class ResearchEngine:
 
     def _validate_change(self, change: ProposedChange) -> None:
         """Validate the proposed change is within bounds."""
+        # Normalize an absolute path (models copy back whatever the file
+        # listing showed) to one relative to the project root, so the
+        # allowed-paths check and git operations both see a relative path.
+        fp = Path(change.file_path)
+        if fp.is_absolute():
+            # outside the repo → leave as-is; the allowed-paths check rejects it
+            with contextlib.suppress(ValueError):
+                change.file_path = str(fp.relative_to(self._root))
+
         # Check file is in allowed paths
         if not any(change.file_path.startswith(p) for p in self._target.allowed_paths):
             raise ValueError(

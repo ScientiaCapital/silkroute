@@ -817,6 +817,39 @@ class TestBudgetsAndSimplicity:
         assert entries[1].status == "discard"
 
 
+class TestValidateChangePathNormalization:
+    def _engine(self, tmp_path: Path):
+        from silkroute.autoresearch.engine import ResearchEngine
+
+        target = MagicMock()
+        target.name = "code"
+        target.allowed_paths = ["src/silkroute/"]
+        target.max_diff_lines = 50
+        return ResearchEngine(
+            target=target, model_id="test-model", project_root=tmp_path, max_experiments=1,
+        )
+
+    def test_absolute_path_under_root_is_relativized(self, tmp_path: Path) -> None:
+        f = tmp_path / "src" / "silkroute" / "foo.py"
+        f.parent.mkdir(parents=True)
+        f.write_text("AAA\n")
+
+        engine = self._engine(tmp_path)
+        change = ProposedChange(
+            file_path=str(f), old_code="AAA", new_code="BBB", rationale="x",
+        )
+        engine._validate_change(change)  # must not raise
+        assert change.file_path == "src/silkroute/foo.py"
+
+    def test_absolute_path_outside_root_rejected(self, tmp_path: Path) -> None:
+        engine = self._engine(tmp_path)
+        change = ProposedChange(
+            file_path="/etc/passwd", old_code="x", new_code="y", rationale="x",
+        )
+        with pytest.raises(ValueError, match="not in allowed paths"):
+            engine._validate_change(change)
+
+
 # ── Engine ↔ agent_memories bridge ───────────────────────────────────
 
 
