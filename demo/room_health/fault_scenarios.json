@@ -1,0 +1,59 @@
+{
+  "_comment": "Held-out fault scenarios for the room-health autoresearch target. NOT editable by the agent (only remediation_rules.yaml is) — this is the eval set the playbook is scored against. Each scenario is a room signal snapshot plus the fault_type and the expected_action that resolves it. 'healthy' is a control: the correct action is 'none' (rules must not over-fire).",
+  "scenarios": [
+    {
+      "id": "recorder-stopped",
+      "fault_type": "recorder_stopped",
+      "expected_action": "start_recorder",
+      "signals": {"device_state": "online", "recorder_state": "stopped", "input_has_signal": true, "storage_mounted": true, "storage_percent_used": 40, "cpu_percent": 20}
+    },
+    {
+      "id": "recorder-paused",
+      "fault_type": "recorder_stopped",
+      "expected_action": "start_recorder",
+      "signals": {"device_state": "online", "recorder_state": "paused", "input_has_signal": true, "storage_mounted": true, "storage_percent_used": 40, "cpu_percent": 20}
+    },
+    {
+      "id": "signal-loss",
+      "fault_type": "signal_loss",
+      "expected_action": "restart_input",
+      "signals": {"device_state": "online", "recorder_state": "recording", "input_has_signal": false, "storage_mounted": true, "storage_percent_used": 40, "cpu_percent": 25}
+    },
+    {
+      "id": "storage-full",
+      "fault_type": "storage_full",
+      "expected_action": "rotate_recordings",
+      "signals": {"device_state": "online", "recorder_state": "recording", "input_has_signal": true, "storage_mounted": true, "storage_percent_used": 95, "cpu_percent": 30}
+    },
+    {
+      "id": "storage-full-boundary",
+      "fault_type": "storage_full",
+      "expected_action": "rotate_recordings",
+      "signals": {"device_state": "online", "recorder_state": "recording", "input_has_signal": true, "storage_mounted": true, "storage_percent_used": 90, "cpu_percent": 30}
+    },
+    {
+      "id": "storage-unmounted",
+      "fault_type": "storage_unmounted",
+      "expected_action": "remount_storage",
+      "signals": {"device_state": "online", "recorder_state": "stopped", "input_has_signal": true, "storage_mounted": false, "storage_percent_used": 0, "cpu_percent": 20}
+    },
+    {
+      "id": "device-offline",
+      "fault_type": "device_offline",
+      "expected_action": "reboot_device",
+      "signals": {"device_state": "offline", "recorder_state": "stopped", "input_has_signal": false, "storage_mounted": false, "storage_percent_used": 0, "cpu_percent": 0}
+    },
+    {
+      "id": "cpu-overload",
+      "fault_type": "cpu_overload",
+      "expected_action": "throttle_channels",
+      "signals": {"device_state": "online", "recorder_state": "recording", "input_has_signal": true, "storage_mounted": true, "storage_percent_used": 50, "cpu_percent": 97}
+    },
+    {
+      "id": "healthy",
+      "fault_type": "healthy",
+      "expected_action": "none",
+      "signals": {"device_state": "online", "recorder_state": "recording", "input_has_signal": true, "storage_mounted": true, "storage_percent_used": 40, "cpu_percent": 22}
+    }
+  ]
+}

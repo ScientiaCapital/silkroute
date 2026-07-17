@@ -1,0 +1,46 @@
+# Room-health remediation playbook — the self-healing control plane's rules.
+#
+# This is the EDITABLE artifact for the `room-health` autoresearch target. The
+# agent iterates on it; the engine scores it against a held-out fault-scenario
+# set (fault_scenarios.json) and keeps changes that remediate more faults.
+#
+# How it's evaluated: for each room, rules are checked top-to-bottom and the
+# FIRST rule whose `when` conditions ALL match decides the remediation `action`.
+# If no rule matches, the action is `none` (correct only for a healthy room).
+#
+# Signals available in `when`:
+#   device_state          "online" | "offline"
+#   recorder_state        "recording" | "stopped" | "paused"
+#   input_has_signal      true | false
+#   storage_mounted       true | false
+#   storage_percent_used  0-100
+#   cpu_percent           0-100
+#
+# Condition forms:
+#   field: value                 → equals
+#   field: {ne: value}           → not equal
+#   field: {gte: N}  {gt: N}  {lte: N}  {lt: N}   → numeric compare
+#
+# Known actions: start_recorder, restart_input, rotate_recordings,
+#   remount_storage, reboot_device, throttle_channels, none
+#
+# NOTE: this seed is intentionally incomplete — several fault types are not yet
+# handled. The agent's job is to add/fix rules so every fault is remediated
+# without over-firing on a healthy room.
+
+rules:
+  - id: recorder-not-recording
+    when:
+      device_state: online
+      recorder_state: {ne: recording}
+    action: start_recorder
+
+  - id: input-signal-loss
+    when:
+      input_has_signal: false
+    action: restart_input
+
+  - id: storage-full
+    when:
+      storage_percent_used: {gte: 90}
+    action: rotate_recordings

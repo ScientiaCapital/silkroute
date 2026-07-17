@@ -567,9 +567,9 @@ def research() -> None:
 @research.command("start")
 @click.option(
     "--target", "-t",
-    type=click.Choice(["code"]),
+    type=click.Choice(["code", "room-health"]),
     default="code",
-    help="Research target",
+    help="Research target: 'code' (improve src/) or 'room-health' (evolve the AV playbook)",
 )
 @click.option(
     "--model", "-m",
@@ -618,11 +618,13 @@ def research_start(
 
     from silkroute.autoresearch.engine import ResearchEngine
     from silkroute.autoresearch.targets.code import CodeImproverTarget
+    from silkroute.autoresearch.targets.room_health import RoomHealthTarget
 
     project_root = Path.cwd()
 
     targets = {
         "code": lambda: CodeImproverTarget(project_root, project_id=project),
+        "room-health": lambda: RoomHealthTarget(project_root, project_id=project),
     }
     research_target = targets[target]()
 
