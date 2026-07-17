@@ -21,6 +21,10 @@ logger = logging.getLogger(__name__)
 # truncated code.
 _LOCAL_MAX_FILES = 4
 _LOCAL_MAX_LINES = 150
+# A 14B's JSON-schema adherence is stochastic at temperature 0.7 — it emits a
+# valid proposal most of the time but occasionally the wrong shape. Re-prompt a
+# few times before giving up (cloud models are reliable and don't retry).
+_LOCAL_MAX_ATTEMPTS = 4
 
 
 def _line_count(fp: Path) -> int:
@@ -131,19 +135,38 @@ async def propose_change(
     ]
 
     if is_local:
-        content = await _invoke_ollama(model_id, messages)
-    else:
-        llm = create_openrouter_model(
-            model_id=model_id,
-            temperature=0.7,  # Creative exploration, not deterministic
-            max_tokens=4096,
-        )
-        response = await llm.ainvoke(messages)
-        content = response.content
-        if not isinstance(content, str):
-            content = str(content)
+        return await _propose_local(model_id, messages)
 
+    llm = create_openrouter_model(
+        model_id=model_id,
+        temperature=0.7,  # Creative exploration, not deterministic
+        max_tokens=4096,
+    )
+    response = await llm.ainvoke(messages)
+    content = response.content
+    if not isinstance(content, str):
+        content = str(content)
     return _parse_response(content)
+
+
+async def _propose_local(model_id: str, messages: list[dict]) -> ProposedChange:
+    """Invoke a local model, re-prompting on a mis-shaped response.
+
+    Raises the last parse error if every attempt fails (engine treats it as a
+    crash, exactly as before — this only reduces how often that happens).
+    """
+    last_err: ValueError | None = None
+    for attempt in range(1, _LOCAL_MAX_ATTEMPTS + 1):
+        content = await _invoke_ollama(model_id, messages)
+        try:
+            return _parse_response(content)
+        except ValueError as e:
+            last_err = e
+            logger.warning(
+                "local propose attempt %d/%d failed: %s", attempt, _LOCAL_MAX_ATTEMPTS, e,
+            )
+    assert last_err is not None
+    raise last_err
 
 
 async def _invoke_ollama(model_id: str, messages: list[dict]) -> str:

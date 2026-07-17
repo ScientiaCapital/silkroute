@@ -282,6 +282,48 @@ class TestOllamaResearcher:
         mock_create.assert_called_once()
 
     @pytest.mark.asyncio
+    async def test_local_retries_on_bad_shape(self, tmp_path: Path) -> None:
+        """A mis-shaped first response is retried; a good later one succeeds."""
+        from silkroute.autoresearch import llm as llm_mod
+
+        f = tmp_path / "mod.py"
+        f.write_text("def foo():\n    pass\n")
+
+        bad = json.dumps({"experiment_id": "x", "next_action": "test"})  # wrong shape
+        good = json.dumps({
+            "file_path": "mod.py", "old_code": "pass", "new_code": "return 1",
+            "rationale": "ok",
+        })
+        with patch.object(llm_mod, "_invoke_ollama",
+                          new=AsyncMock(side_effect=[bad, bad, good])) as mock_invoke:
+            change = await propose_change(
+                model_id="ollama/qwen2.5:14b",
+                program="p", context="c", target_files=[f],
+                allowed_paths=["src/"], max_diff_lines=50,
+            )
+        assert change.rationale == "ok"
+        assert mock_invoke.await_count == 3
+
+    @pytest.mark.asyncio
+    async def test_local_raises_after_max_attempts(self, tmp_path: Path) -> None:
+        """All attempts mis-shaped → raises (engine treats as crash)."""
+        from silkroute.autoresearch import llm as llm_mod
+
+        f = tmp_path / "mod.py"
+        f.write_text("def foo():\n    pass\n")
+
+        bad = json.dumps({"experiment_id": "x"})
+        with patch.object(llm_mod, "_invoke_ollama",
+                          new=AsyncMock(return_value=bad)) as mock_invoke:
+            with pytest.raises(ValueError):
+                await propose_change(
+                    model_id="ollama/qwen2.5:14b",
+                    program="p", context="c", target_files=[f],
+                    allowed_paths=["src/"], max_diff_lines=50,
+                )
+        assert mock_invoke.await_count == llm_mod._LOCAL_MAX_ATTEMPTS
+
+    @pytest.mark.asyncio
     async def test_local_path_reduces_file_listing(self, tmp_path: Path) -> None:
         """A local model gets far fewer files than the 20 the engine passes —
         a 14B loses output-schema discipline on a ~70KB prompt."""
