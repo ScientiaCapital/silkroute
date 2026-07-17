@@ -369,3 +369,126 @@ class TestProjectsCommands:
         result = runner.invoke(main, ["projects", "list"])
         assert result.exit_code == 1
         assert "Error" in result.output
+
+
+class TestMemoryCommands:
+    def _mock_pool(self) -> MagicMock:
+        pool = MagicMock()
+        pool.close = AsyncMock()
+        return pool
+
+    @patch("silkroute.config.settings.load_settings")
+    @patch("silkroute.db.repositories.memories.list_memories", new_callable=AsyncMock)
+    @patch("asyncpg.create_pool", new_callable=AsyncMock)
+    def test_memory_list(
+        self,
+        mock_create_pool: AsyncMock,
+        mock_list_memories: AsyncMock,
+        mock_load_settings: MagicMock,
+        test_settings: SilkRouteSettings,
+    ) -> None:
+        mock_load_settings.return_value = test_settings
+        mock_create_pool.return_value = self._mock_pool()
+        mock_list_memories.return_value = [
+            {
+                "id": 1,
+                "kind": "fact",
+                "project_id": "proj1",
+                "importance": 0.5,
+                "recall_count": 2,
+                "content": "User prefers concise commits",
+                "created_at": "2026-07-17",
+            }
+        ]
+
+        result = runner.invoke(main, ["memory", "list"])
+        assert result.exit_code == 0
+        assert "proj1" in result.output
+        assert "fact" in result.output
+
+    @patch("silkroute.config.settings.load_settings")
+    @patch("silkroute.db.repositories.memories.list_memories", new_callable=AsyncMock)
+    @patch("asyncpg.create_pool", new_callable=AsyncMock)
+    def test_memory_list_empty(
+        self,
+        mock_create_pool: AsyncMock,
+        mock_list_memories: AsyncMock,
+        mock_load_settings: MagicMock,
+        test_settings: SilkRouteSettings,
+    ) -> None:
+        mock_load_settings.return_value = test_settings
+        mock_create_pool.return_value = self._mock_pool()
+        mock_list_memories.return_value = []
+
+        result = runner.invoke(main, ["memory", "list"])
+        assert result.exit_code == 0
+        assert "No memories found" in result.output
+
+    @patch("silkroute.config.settings.load_settings")
+    @patch("silkroute.db.repositories.memories.insert_memory", new_callable=AsyncMock)
+    @patch("asyncpg.create_pool", new_callable=AsyncMock)
+    def test_memory_add(
+        self,
+        mock_create_pool: AsyncMock,
+        mock_insert_memory: AsyncMock,
+        mock_load_settings: MagicMock,
+        test_settings: SilkRouteSettings,
+    ) -> None:
+        mock_load_settings.return_value = test_settings
+        mock_create_pool.return_value = self._mock_pool()
+        mock_insert_memory.return_value = {"id": 1}
+
+        result = runner.invoke(main, ["memory", "add", "User likes dark mode"])
+        assert result.exit_code == 0
+        assert "Saved memory #1" in result.output
+
+    @patch("silkroute.config.settings.load_settings")
+    @patch("silkroute.db.repositories.memories.delete_memory", new_callable=AsyncMock)
+    @patch("asyncpg.create_pool", new_callable=AsyncMock)
+    def test_memory_forget(
+        self,
+        mock_create_pool: AsyncMock,
+        mock_delete_memory: AsyncMock,
+        mock_load_settings: MagicMock,
+        test_settings: SilkRouteSettings,
+    ) -> None:
+        mock_load_settings.return_value = test_settings
+        mock_create_pool.return_value = self._mock_pool()
+        mock_delete_memory.return_value = True
+
+        result = runner.invoke(main, ["memory", "forget", "1"])
+        assert result.exit_code == 0
+        assert "Forgot memory #1" in result.output
+
+    @patch("silkroute.config.settings.load_settings")
+    @patch("silkroute.db.repositories.memories.delete_memory", new_callable=AsyncMock)
+    @patch("asyncpg.create_pool", new_callable=AsyncMock)
+    def test_memory_forget_not_found(
+        self,
+        mock_create_pool: AsyncMock,
+        mock_delete_memory: AsyncMock,
+        mock_load_settings: MagicMock,
+        test_settings: SilkRouteSettings,
+    ) -> None:
+        mock_load_settings.return_value = test_settings
+        mock_create_pool.return_value = self._mock_pool()
+        mock_delete_memory.return_value = False
+
+        result = runner.invoke(main, ["memory", "forget", "999"])
+        assert result.exit_code == 0
+        assert "not found" in result.output
+
+    @patch("silkroute.config.settings.load_settings")
+    @patch("asyncpg.create_pool", new_callable=AsyncMock)
+    def test_memory_list_db_error(
+        self,
+        mock_create_pool: AsyncMock,
+        mock_load_settings: MagicMock,
+        test_settings: SilkRouteSettings,
+    ) -> None:
+        mock_load_settings.return_value = test_settings
+        mock_create_pool.side_effect = Exception("connection refused")
+
+        result = runner.invoke(main, ["memory", "list"])
+        assert result.exit_code == 1
+        assert "Error" in result.output

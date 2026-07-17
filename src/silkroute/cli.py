@@ -985,6 +985,143 @@ def projects_delete(project_id: str) -> None:
         raise SystemExit(1) from e
 
 
+# --- Memory ---
+
+
+@main.group()
+def memory() -> None:
+    """Manage persistent agent memory."""
+    pass
+
+
+@memory.command("list")
+@click.option("--project", "project_id", default=None, help="Filter to a project (default: all)")
+@click.option("--kind", default=None, type=click.Choice(["fact", "preference", "outcome"]))
+@click.option("--limit", type=int, default=50, help="Max rows to show")
+def memory_list(project_id: str | None, kind: str | None, limit: int) -> None:
+    """List stored memories."""
+    import asyncio
+
+    import asyncpg
+    from rich.table import Table as RichTable
+
+    from silkroute.config.settings import load_settings
+
+    settings = load_settings()
+
+    async def _list() -> list[dict]:
+        pool = await asyncpg.create_pool(settings.database.postgres_url, min_size=1, max_size=2)
+        try:
+            from silkroute.db.repositories.memories import list_memories
+            return await list_memories(pool, project_id=project_id, kind=kind, limit=limit)
+        finally:
+            await pool.close()
+
+    try:
+        rows = asyncio.run(_list())
+    except Exception as e:
+        console.print(f"[red]Error: {e}[/red]")
+        raise SystemExit(1) from e
+
+    if not rows:
+        console.print("[yellow]No memories found.[/yellow]")
+        return
+
+    table = RichTable(title="Memories")
+    table.add_column("ID", style="cyan")
+    table.add_column("Kind")
+    table.add_column("Scope")
+    table.add_column("Importance", justify="right")
+    table.add_column("Recalls", justify="right")
+    table.add_column("Content")
+    table.add_column("Created")
+    for r in rows:
+        content = r["content"]
+        if len(content) > 60:
+            content = content[:60] + "..."
+        table.add_row(
+            str(r["id"]),
+            r["kind"],
+            r["project_id"] or "[dim]global[/dim]",
+            f"{float(r['importance']):.2f}",
+            str(r["recall_count"]),
+            content,
+            str(r["created_at"]),
+        )
+    console.print(table)
+
+
+@memory.command("add")
+@click.argument("content")
+@click.option("--kind", type=click.Choice(["fact", "preference", "outcome"]), default="fact")
+@click.option("--project", "project_id", default="default", help="Project scope")
+@click.option("--importance", type=float, default=0.5, help="0.0-1.0")
+@click.option("--global", "global_scope", is_flag=True, help="Store as a global memory")
+def memory_add(
+    content: str, kind: str, project_id: str, importance: float, global_scope: bool,
+) -> None:
+    """Manually add a memory (useful for seeding demos)."""
+    import asyncio
+
+    import asyncpg
+
+    from silkroute.config.settings import load_settings
+
+    settings = load_settings()
+
+    async def _add() -> dict:
+        pool = await asyncpg.create_pool(settings.database.postgres_url, min_size=1, max_size=2)
+        try:
+            from silkroute.db.repositories.memories import insert_memory
+            return await insert_memory(
+                pool,
+                content,
+                kind=kind,
+                project_id=None if global_scope else project_id,
+                importance=importance,
+            )
+        finally:
+            await pool.close()
+
+    try:
+        row = asyncio.run(_add())
+        console.print(f"[green]Saved memory #{row['id']}[/green]")
+    except Exception as e:
+        console.print(f"[red]Error: {e}[/red]")
+        raise SystemExit(1) from e
+
+
+@memory.command("forget")
+@click.argument("memory_id", type=int)
+def memory_forget(memory_id: int) -> None:
+    """Delete a memory by id."""
+    import asyncio
+
+    import asyncpg
+
+    from silkroute.config.settings import load_settings
+
+    settings = load_settings()
+
+    async def _forget() -> bool:
+        pool = await asyncpg.create_pool(settings.database.postgres_url, min_size=1, max_size=2)
+        try:
+            from silkroute.db.repositories.memories import delete_memory
+            return await delete_memory(pool, memory_id)
+        finally:
+            await pool.close()
+
+    try:
+        deleted = asyncio.run(_forget())
+        if deleted:
+            console.print(f"[green]Forgot memory #{memory_id}.[/green]")
+        else:
+            console.print(f"[yellow]Memory #{memory_id} not found.[/yellow]")
+    except Exception as e:
+        console.print(f"[red]Error: {e}[/red]")
+        raise SystemExit(1) from e
+
+
 def _default_config() -> str:
     """Generate default silkroute.toml configuration."""
     return """\
