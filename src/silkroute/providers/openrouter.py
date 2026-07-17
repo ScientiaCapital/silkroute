@@ -13,10 +13,12 @@ OpenRouter is simply one more entry in the provider→base-URL table, letting
 from __future__ import annotations
 
 import os
-
-from langchain_openai import ChatOpenAI
+from typing import TYPE_CHECKING
 
 from silkroute.providers.models import Provider
+
+if TYPE_CHECKING:
+    from langchain_openai import ChatOpenAI
 
 _OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 
@@ -79,6 +81,11 @@ def create_direct_model(
     Raises:
         ValueError: If the provider has no direct endpoint, or no API key found.
     """
+    # Imported lazily so this module (and the local Ollama research path that
+    # imports it) doesn't require the `mantis` extra just to load. Only the
+    # actual cloud/direct-vendor path needs langchain-openai installed.
+    from langchain_openai import ChatOpenAI
+
     base_url = _PROVIDER_BASE_URLS.get(provider)
     if base_url is None:
         raise ValueError(

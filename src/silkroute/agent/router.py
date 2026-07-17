@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import os
 
-from silkroute.config.settings import ModelTier, ProviderConfig
+from silkroute.config.settings import HardwareProfile, ModelTier, ProviderConfig
 from silkroute.providers.models import (
     DEFAULT_ROUTING,
     DIRECT_MODEL_NAMES,
@@ -23,15 +23,58 @@ from silkroute.providers.models import (
     get_model,
 )
 
+# Local-inference RAM budget per deployment profile, in GB. 0.0 means "no local
+# inference here — run the orchestrator and delegate inference to cloud/beefier
+# nodes." The Pi and a cloud VPS both delegate; workstations run models locally.
+PROFILE_RAM_GB: dict[HardwareProfile, float] = {
+    HardwareProfile.RASPBERRY_PI: 0.0,
+    HardwareProfile.HETZNER_VPS: 0.0,
+    HardwareProfile.CUSTOM: 0.0,
+    HardwareProfile.MAC_MINI: 16.0,
+    HardwareProfile.MAC_STUDIO: 64.0,
+    HardwareProfile.NVIDIA_SPARK: 128.0,
+}
+
+
+def model_fits_ram(model: ModelSpec, ram_gb: float) -> bool:
+    """True if *model* is a local model that fits within *ram_gb*.
+
+    Only Ollama models with a positive ``min_ram_gb`` are "local-fittable";
+    cloud models (``min_ram_gb == 0``) are delegated, never run locally, so they
+    never "fit" in this sense.
+    """
+    return (
+        model.provider == Provider.OLLAMA
+        and model.min_ram_gb > 0
+        and model.min_ram_gb <= ram_gb
+    )
+
+
+def best_local_model(ram_gb: float, tier: ModelTier = ModelTier.FREE) -> ModelSpec | None:
+    """Pick the highest-capability local model that fits *ram_gb*, or None.
+
+    "Biggest that fits" (by ``min_ram_gb``) is the primary key — a proxy for
+    capability — with a capability score tie-break. Returns None when no local
+    model fits (e.g. a Pi with a 0 GB budget → delegate to the cloud).
+    """
+    candidates = [m for m in MODELS_BY_TIER.get(tier, []) if model_fits_ram(m, ram_gb)]
+    if not candidates:
+        return None
+    default_caps = [Capability.TOOL_CALLING, Capability.AGENTIC]
+    return max(candidates, key=lambda m: (m.min_ram_gb, _score_model(m, default_caps)))
+
 
 def select_model(
     tier: ModelTier,
     capabilities: list[Capability] | None = None,
     preferred_model: str | None = None,
+    hardware_profile: HardwareProfile | None = None,
 ) -> ModelSpec:
-    """Select the best model using a 4-level priority cascade.
+    """Select the best model using a priority cascade.
 
     1. User override (--model flag) → direct lookup
+    1.5. Hardware fit (FREE tier only): if a profile is given and a local model
+         fits its RAM budget, run local; otherwise delegate to the cloud cascade.
     2. Capability-scored selection from tier models
     3. DEFAULT_ROUTING fallback chain (first available)
     4. Absolute fallback: DeepSeek V3.2
@@ -41,6 +84,13 @@ def select_model(
         model = get_model(preferred_model)
         if model:
             return model
+
+    # Level 1.5: Hardware-fit local routing (edge orchestrator story). Only for
+    # FREE-tier work — STANDARD/PREMIUM always go to the cloud cascade below.
+    if hardware_profile is not None and tier == ModelTier.FREE:
+        local = best_local_model(PROFILE_RAM_GB.get(hardware_profile, 0.0), tier)
+        if local is not None:
+            return local
 
     # Level 2: Capability-scored selection
     if capabilities:
