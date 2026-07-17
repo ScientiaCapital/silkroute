@@ -37,3 +37,5 @@ silkroute_redis/
 
 # Playwright MCP debugging artifacts
 .playwright-mcp/
+.silkroute/
+.coverage
