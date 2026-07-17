@@ -1122,6 +1122,83 @@ def memory_forget(memory_id: int) -> None:
         raise SystemExit(1) from e
 
 
+# --- Database migrations ---
+
+
+@main.group()
+def db() -> None:
+    """Manage the SilkRoute database schema."""
+    pass
+
+
+@db.command("status")
+def db_status() -> None:
+    """Show pending schema migrations."""
+    import asyncio
+
+    import asyncpg
+
+    from silkroute.config.settings import load_settings
+
+    settings = load_settings()
+
+    async def _status() -> list:
+        pool = await asyncpg.create_pool(settings.database.postgres_url, min_size=1, max_size=2)
+        try:
+            from silkroute.db.migrations import list_pending_migrations
+            return await list_pending_migrations(pool)
+        finally:
+            await pool.close()
+
+    try:
+        pending = asyncio.run(_status())
+    except Exception as e:
+        console.print(f"[red]Error: {e}[/red]")
+        raise SystemExit(1) from e
+
+    if not pending:
+        console.print("[green]Schema is up to date. No pending migrations.[/green]")
+        return
+
+    console.print(f"[yellow]{len(pending)} pending migration(s):[/yellow]")
+    for m in pending:
+        console.print(f"  {m.version:04d}  {m.name}")
+
+
+@db.command("migrate")
+def db_migrate() -> None:
+    """Apply pending schema migrations."""
+    import asyncio
+
+    import asyncpg
+
+    from silkroute.config.settings import load_settings
+
+    settings = load_settings()
+
+    async def _migrate() -> list:
+        pool = await asyncpg.create_pool(settings.database.postgres_url, min_size=1, max_size=2)
+        try:
+            from silkroute.db.migrations import apply_migrations
+            return await apply_migrations(pool)
+        finally:
+            await pool.close()
+
+    try:
+        applied = asyncio.run(_migrate())
+    except Exception as e:
+        console.print(f"[red]Error: {e}[/red]")
+        raise SystemExit(1) from e
+
+    if not applied:
+        console.print("[green]Schema is already up to date.[/green]")
+        return
+
+    console.print(f"[green]Applied {len(applied)} migration(s):[/green]")
+    for m in applied:
+        console.print(f"  {m.version:04d}  {m.name}")
+
+
 def _default_config() -> str:
     """Generate default silkroute.toml configuration."""
     return """\

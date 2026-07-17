@@ -16,7 +16,8 @@ silkroute/
 ├── demo/                   # AV demo agents + Pearl mock server
 ├── docs/                   # Guides + design/implementation plans (docs/plans/)
 ├── scripts/                # Deployment entrypoints (start.sh)
-├── sql/init.sql            # PostgreSQL schema (7 tables, 2 views)
+├── sql/init.sql            # PostgreSQL schema (12 tables, 2 views) — fresh-install bootstrap
+│   └── migrations/         # Numbered catch-up migrations for existing DBs (`silkroute db migrate`)
 ├── docker-compose.yml      # LiteLLM + Postgres + Redis
 ├── litellm_config.yaml     # Chinese model routing config
 ├── pyproject.toml          # Python build config (hatchling)
