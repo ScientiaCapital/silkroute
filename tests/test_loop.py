@@ -95,6 +95,29 @@ class TestRunAgent:
         assert session.iteration_count == 1
 
     @pytest.mark.asyncio
+    async def test_memory_fails_open_without_db_pool(self):
+        """No DB pool (the default in these tests) → no `remember` tool, no
+        `## Memory` section, and the session still completes normally."""
+        mock_response = _make_completion_response("Done.")
+
+        with patch("silkroute.agent.loop.litellm") as mock_litellm:
+            mock_litellm.acompletion = AsyncMock(return_value=mock_response)
+            mock_litellm.completion_cost.return_value = 0.0001
+            mock_litellm.suppress_debug_info = True
+
+            session = await run_agent(
+                "Summarize this project",
+                budget_limit_usd=1.0,
+                max_iterations=5,
+            )
+
+        assert session.status == SessionStatus.COMPLETED
+        tools_arg = mock_litellm.acompletion.call_args.kwargs["tools"]
+        tool_names = [t["function"]["name"] for t in tools_arg]
+        assert "remember" not in tool_names
+        assert "## Memory" not in session.messages[0]["content"]
+
+    @pytest.mark.asyncio
     async def test_tool_call_then_complete(self):
         """Model calls a tool, then completes."""
         tool_response = _make_tool_call_response("list_directory", '{"path": "."}')

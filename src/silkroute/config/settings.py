@@ -325,6 +325,31 @@ class FinopsConfig(BaseSettings):
     )
 
 
+class MemoryConfig(BaseSettings):
+    """Persistent cross-session agent memory — recall + the `remember` tool."""
+
+    model_config = SettingsConfigDict(env_prefix="SILKROUTE_MEMORY_")
+
+    enabled: bool = Field(
+        default=True,
+        description="Recall memories at session start and register the `remember` tool "
+        "(only takes effect when a DB pool is available — fails open otherwise)",
+    )
+    recall_limit: int = Field(
+        default=8,
+        description="Max memories to recall per session (project-scoped + global)",
+    )
+    recall_max_tokens: int = Field(
+        default=600,
+        description="Token budget for the recalled-memories system prompt section — "
+        "kept small so weaker local models aren't overwhelmed",
+    )
+    max_content_chars: int = Field(
+        default=500,
+        description="Max characters stored per memory (truncated beyond this)",
+    )
+
+
 class DatabaseConfig(BaseSettings):
     """PostgreSQL and Redis connection settings."""
 
@@ -358,6 +383,7 @@ class SilkRouteSettings(BaseSettings):
     daemon: DaemonConfig = Field(default_factory=DaemonConfig)
     mcp: MCPConfig = Field(default_factory=MCPConfig)
     finops: FinopsConfig = Field(default_factory=FinopsConfig)
+    memory: MemoryConfig = Field(default_factory=MemoryConfig)
     database: DatabaseConfig = Field(default_factory=DatabaseConfig)
     mantis: MantisConfig = Field(default_factory=MantisConfig)
     api: ApiConfig = Field(default_factory=ApiConfig)

@@ -220,6 +220,26 @@ class SupervisorRuntime:
         plan = session.plan
         ctx_mgr = ContextManager.from_legacy_dict(plan.context)
 
+        if self._db_pool is not None:
+            try:
+                from silkroute.agent.memory import format_memory_block, recall_for_session
+                from silkroute.config.settings import MemoryConfig
+
+                memories = await recall_for_session(
+                    self._db_pool, config.project_id, MemoryConfig(),
+                )
+                memory_block = format_memory_block(memories)
+                if memory_block:
+                    await ctx_mgr.set(
+                        "__silkroute_memories__",
+                        memory_block,
+                        scope=ContextScope.SESSION,
+                        source="memory",
+                        token_estimate=max(1, len(memory_block) // 4),
+                    )
+            except Exception as exc:
+                log.warning("supervisor_memory_recall_failed", error=str(exc))
+
         step_timeout = self._config.step_timeout_seconds if self._config else 300
         checkpoint_enabled = self._config.checkpoint_enabled if self._config else True
 

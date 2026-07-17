@@ -20,7 +20,7 @@ reading files, writing code, and running shell commands using the provided tools
 - Budget remaining: ${budget_remaining:.4f}
 - Max iterations: {max_iterations}
 - Current iteration: {current_iteration}
-
+{memories_block}
 ## Rules
 
 1. **Use tools to accomplish the task.** Do not guess file contents — read them.
@@ -31,6 +31,8 @@ reply with a summary of what you did. Do NOT call any tools in your final respon
 5. **Be concise in your reasoning.** Brief thoughts before each action.
 6. **Handle errors gracefully.** If a tool call fails, try an alternative approach.
 7. **Respect the budget.** You have limited iterations and cost budget. Be efficient.
+8. **Use the `remember` tool** (when available) to save durable facts, user \
+preferences, or outcomes worth recalling in future sessions.
 
 ## Task
 
@@ -47,8 +49,13 @@ def build_system_prompt(
     max_iterations: int,
     current_iteration: int,
     task: str,
+    memories_block: str = "",
 ) -> str:
-    """Build the system prompt with runtime context injected."""
+    """Build the system prompt with runtime context injected.
+
+    memories_block: pre-formatted "## Memory" section from
+    agent.memory.format_memory_block(), or "" if nothing was recalled.
+    """
     return SYSTEM_PROMPT_TEMPLATE.format(
         project_id=project_id,
         workspace_dir=workspace_dir,
@@ -57,4 +64,5 @@ def build_system_prompt(
         max_iterations=max_iterations,
         current_iteration=current_iteration,
         task=task,
+        memories_block=f"{memories_block}\n" if memories_block else "",
     )
