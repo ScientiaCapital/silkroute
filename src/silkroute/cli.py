@@ -529,7 +529,12 @@ def research() -> None:
     type=int,
     help="Max experiments to run (0 = infinite)",
 )
-def research_start(target: str, model: str, max_experiments: int) -> None:
+@click.option(
+    "--project", "-p",
+    default="default",
+    help="Project ID for memory persistence (agent_memories)",
+)
+def research_start(target: str, model: str, max_experiments: int, project: str) -> None:
     """Start the autoresearch experiment loop.
 
     Runs forever (or up to --max-experiments) on a dedicated git branch.
@@ -545,7 +550,7 @@ def research_start(target: str, model: str, max_experiments: int) -> None:
     project_root = Path.cwd()
 
     targets = {
-        "code": lambda: CodeImproverTarget(project_root),
+        "code": lambda: CodeImproverTarget(project_root, project_id=project),
     }
     research_target = targets[target]()
 
@@ -554,6 +559,7 @@ def research_start(target: str, model: str, max_experiments: int) -> None:
         model_id=model,
         project_root=project_root,
         max_experiments=max_experiments,
+        project_id=project,
     )
 
     try:

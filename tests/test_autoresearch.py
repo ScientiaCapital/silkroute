@@ -262,6 +262,9 @@ class TestEngine:
             max_experiments=1,
         )
 
+        import silkroute.db.pool as pool_mod
+        pool_mod._pool = None
+
         # Mock git and LLM
         with patch.object(engine, "_create_branch", return_value="autoresearch/test"), \
              patch.object(engine, "_git_short_hash", return_value="abc1234"), \
@@ -270,7 +273,11 @@ class TestEngine:
              patch.object(engine, "_setup_signal_handlers"), \
              patch("silkroute.autoresearch.engine.propose_change", new_callable=AsyncMock) as mock_propose, \
              patch.object(engine, "_validate_change"), \
-             patch.object(engine, "_apply_change"):
+             patch.object(engine, "_apply_change"), \
+             patch(
+                 "silkroute.db.pool.asyncpg.create_pool",
+                 new_callable=AsyncMock, side_effect=OSError("no db in unit tests"),
+             ):
 
             mock_propose.return_value = ProposedChange(
                 file_path="src/test.py",
@@ -280,6 +287,8 @@ class TestEngine:
             )
 
             await engine.run()
+
+        pool_mod._pool = None
 
         # Should NOT have reset (change was kept)
         mock_reset.assert_not_called()
@@ -320,6 +329,9 @@ class TestEngine:
             max_experiments=1,
         )
 
+        import silkroute.db.pool as pool_mod
+        pool_mod._pool = None
+
         with patch.object(engine, "_create_branch", return_value="autoresearch/test"), \
              patch.object(engine, "_git_short_hash", return_value="abc1234"), \
              patch.object(engine, "_git_commit", return_value="def5678"), \
@@ -327,7 +339,11 @@ class TestEngine:
              patch.object(engine, "_setup_signal_handlers"), \
              patch("silkroute.autoresearch.engine.propose_change", new_callable=AsyncMock) as mock_propose, \
              patch.object(engine, "_validate_change"), \
-             patch.object(engine, "_apply_change"):
+             patch.object(engine, "_apply_change"), \
+             patch(
+                 "silkroute.db.pool.asyncpg.create_pool",
+                 new_callable=AsyncMock, side_effect=OSError("no db in unit tests"),
+             ):
 
             mock_propose.return_value = ProposedChange(
                 file_path="src/test.py",
@@ -337,6 +353,8 @@ class TestEngine:
             )
 
             await engine.run()
+
+        pool_mod._pool = None
 
         # Should have reset (change was discarded)
         mock_reset.assert_called_once()
@@ -369,17 +387,326 @@ class TestEngine:
             max_experiments=10,
         )
 
+        import silkroute.db.pool as pool_mod
+        pool_mod._pool = None
+
         with patch.object(engine, "_create_branch", return_value="autoresearch/test"), \
              patch.object(engine, "_git_short_hash", return_value="abc1234"), \
              patch.object(engine, "_setup_signal_handlers"), \
-             patch.object(engine, "_revert_if_dirty"):
+             patch.object(engine, "_revert_if_dirty"), \
+             patch(
+                 "silkroute.db.pool.asyncpg.create_pool",
+                 new_callable=AsyncMock, side_effect=OSError("no db in unit tests"),
+             ):
 
             await engine.run()
+
+        pool_mod._pool = None
 
         # Should have stopped after 3 crashes + 1 baseline
         entries = engine.ledger.read()
         crash_entries = [e for e in entries if e.status == "crash"]
         assert len(crash_entries) == 3
+
+
+# ── Engine ↔ agent_memories bridge ───────────────────────────────────
+
+
+class TestEngineMemoryBridge:
+    def _target(self) -> MagicMock:
+        target = MagicMock()
+        target.name = "code"
+        target.allowed_paths = ["src/"]
+        target.max_diff_lines = 50
+        target.get_editable_files = MagicMock(return_value=[])
+        target.build_context = AsyncMock(return_value="context")
+        return target
+
+    @pytest.mark.asyncio
+    async def test_keep_records_outcome_memory(self, tmp_path: Path) -> None:
+        from silkroute.autoresearch.engine import ResearchEngine
+
+        target = self._target()
+        baseline = Metrics(
+            pass_rate=0.8, coverage_pct=0.5, lint_clean=True,
+            total_tests=100, tests_passed=80, tests_failed=20, error_summary="",
+        )
+        improved = Metrics(
+            pass_rate=0.9, coverage_pct=0.6, lint_clean=True,
+            total_tests=100, tests_passed=90, tests_failed=10, error_summary="",
+        )
+        target.evaluate = AsyncMock(side_effect=[baseline, improved])
+
+        engine = ResearchEngine(
+            target=target, model_id="test-model", project_root=tmp_path,
+            max_experiments=1, project_id="proj-1",
+        )
+
+        import silkroute.db.pool as pool_mod
+        pool_mod._pool = None
+        mock_pool = AsyncMock()
+
+        with patch.object(engine, "_create_branch", return_value="autoresearch/test"), \
+             patch.object(engine, "_git_short_hash", return_value="abc1234"), \
+             patch.object(engine, "_git_commit", return_value="def5678"), \
+             patch.object(engine, "_git_reset") as mock_reset, \
+             patch.object(engine, "_setup_signal_handlers"), \
+             patch("silkroute.autoresearch.engine.propose_change", new_callable=AsyncMock) as mock_propose, \
+             patch.object(engine, "_validate_change"), \
+             patch.object(engine, "_apply_change"), \
+             patch(
+                 "silkroute.db.pool.asyncpg.create_pool",
+                 new_callable=AsyncMock, return_value=mock_pool,
+             ), \
+             patch(
+                 "silkroute.db.repositories.memories.insert_memory", new_callable=AsyncMock,
+             ) as mock_insert:
+            mock_propose.return_value = ProposedChange(
+                file_path="src/test.py", old_code="old", new_code="new",
+                rationale="improved something",
+            )
+            await engine.run()
+
+        pool_mod._pool = None
+
+        mock_reset.assert_not_called()
+        mock_insert.assert_called_once()
+        _, kwargs = mock_insert.call_args
+        assert kwargs["kind"] == "outcome"
+        assert kwargs["importance"] == 0.6
+        assert kwargs["project_id"] == "proj-1"
+
+    @pytest.mark.asyncio
+    async def test_discard_records_outcome_memory(self, tmp_path: Path) -> None:
+        from silkroute.autoresearch.engine import ResearchEngine
+
+        target = self._target()
+        baseline = Metrics(
+            pass_rate=0.9, coverage_pct=0.8, lint_clean=True,
+            total_tests=100, tests_passed=90, tests_failed=10, error_summary="",
+        )
+        worse = Metrics(
+            pass_rate=0.7, coverage_pct=0.6, lint_clean=True,
+            total_tests=100, tests_passed=70, tests_failed=30, error_summary="",
+        )
+        target.evaluate = AsyncMock(side_effect=[baseline, worse])
+
+        engine = ResearchEngine(
+            target=target, model_id="test-model", project_root=tmp_path, max_experiments=1,
+        )
+
+        import silkroute.db.pool as pool_mod
+        pool_mod._pool = None
+        mock_pool = AsyncMock()
+
+        with patch.object(engine, "_create_branch", return_value="autoresearch/test"), \
+             patch.object(engine, "_git_short_hash", return_value="abc1234"), \
+             patch.object(engine, "_git_commit", return_value="def5678"), \
+             patch.object(engine, "_git_reset") as mock_reset, \
+             patch.object(engine, "_setup_signal_handlers"), \
+             patch("silkroute.autoresearch.engine.propose_change", new_callable=AsyncMock) as mock_propose, \
+             patch.object(engine, "_validate_change"), \
+             patch.object(engine, "_apply_change"), \
+             patch(
+                 "silkroute.db.pool.asyncpg.create_pool",
+                 new_callable=AsyncMock, return_value=mock_pool,
+             ), \
+             patch(
+                 "silkroute.db.repositories.memories.insert_memory", new_callable=AsyncMock,
+             ) as mock_insert:
+            mock_propose.return_value = ProposedChange(
+                file_path="src/test.py", old_code="old", new_code="new",
+                rationale="broke something",
+            )
+            await engine.run()
+
+        pool_mod._pool = None
+
+        mock_reset.assert_called_once()
+        mock_insert.assert_called_once()
+        _, kwargs = mock_insert.call_args
+        assert kwargs["importance"] == 0.3
+
+    @pytest.mark.asyncio
+    async def test_memory_failure_does_not_break_keep_flow(self, tmp_path: Path) -> None:
+        from silkroute.autoresearch.engine import ResearchEngine
+
+        target = self._target()
+        baseline = Metrics(
+            pass_rate=0.8, coverage_pct=0.5, lint_clean=True,
+            total_tests=100, tests_passed=80, tests_failed=20, error_summary="",
+        )
+        improved = Metrics(
+            pass_rate=0.9, coverage_pct=0.6, lint_clean=True,
+            total_tests=100, tests_passed=90, tests_failed=10, error_summary="",
+        )
+        target.evaluate = AsyncMock(side_effect=[baseline, improved])
+
+        engine = ResearchEngine(
+            target=target, model_id="test-model", project_root=tmp_path, max_experiments=1,
+        )
+
+        import silkroute.db.pool as pool_mod
+        pool_mod._pool = None
+        mock_pool = AsyncMock()
+
+        with patch.object(engine, "_create_branch", return_value="autoresearch/test"), \
+             patch.object(engine, "_git_short_hash", return_value="abc1234"), \
+             patch.object(engine, "_git_commit", return_value="def5678"), \
+             patch.object(engine, "_git_reset") as mock_reset, \
+             patch.object(engine, "_setup_signal_handlers"), \
+             patch("silkroute.autoresearch.engine.propose_change", new_callable=AsyncMock) as mock_propose, \
+             patch.object(engine, "_validate_change"), \
+             patch.object(engine, "_apply_change"), \
+             patch(
+                 "silkroute.db.pool.asyncpg.create_pool",
+                 new_callable=AsyncMock, return_value=mock_pool,
+             ), \
+             patch(
+                 "silkroute.db.repositories.memories.insert_memory",
+                 new_callable=AsyncMock, side_effect=RuntimeError("db down"),
+             ):
+            mock_propose.return_value = ProposedChange(
+                file_path="src/test.py", old_code="old", new_code="new",
+                rationale="improved something",
+            )
+            await engine.run()  # must not raise
+
+        pool_mod._pool = None
+
+        mock_reset.assert_not_called()
+        entries = engine.ledger.read()
+        assert len(entries) == 2
+        assert entries[1].status == "keep"
+
+    @pytest.mark.asyncio
+    async def test_fail_open_no_pool_available(self, tmp_path: Path) -> None:
+        from silkroute.autoresearch.engine import ResearchEngine
+
+        target = self._target()
+        baseline = Metrics(
+            pass_rate=0.8, coverage_pct=0.5, lint_clean=True,
+            total_tests=100, tests_passed=80, tests_failed=20, error_summary="",
+        )
+        improved = Metrics(
+            pass_rate=0.9, coverage_pct=0.6, lint_clean=True,
+            total_tests=100, tests_passed=90, tests_failed=10, error_summary="",
+        )
+        target.evaluate = AsyncMock(side_effect=[baseline, improved])
+
+        engine = ResearchEngine(
+            target=target, model_id="test-model", project_root=tmp_path, max_experiments=1,
+        )
+
+        import silkroute.db.pool as pool_mod
+        pool_mod._pool = None
+
+        with patch.object(engine, "_create_branch", return_value="autoresearch/test"), \
+             patch.object(engine, "_git_short_hash", return_value="abc1234"), \
+             patch.object(engine, "_git_commit", return_value="def5678"), \
+             patch.object(engine, "_git_reset") as mock_reset, \
+             patch.object(engine, "_setup_signal_handlers"), \
+             patch("silkroute.autoresearch.engine.propose_change", new_callable=AsyncMock) as mock_propose, \
+             patch.object(engine, "_validate_change"), \
+             patch.object(engine, "_apply_change"), \
+             patch(
+                 "silkroute.db.pool.asyncpg.create_pool",
+                 new_callable=AsyncMock, side_effect=OSError("refused"),
+             ), \
+             patch(
+                 "silkroute.db.repositories.memories.insert_memory", new_callable=AsyncMock,
+             ) as mock_insert:
+            mock_propose.return_value = ProposedChange(
+                file_path="src/test.py", old_code="old", new_code="new",
+                rationale="improved something",
+            )
+            await engine.run()
+
+        pool_mod._pool = None
+
+        mock_insert.assert_not_called()
+        mock_reset.assert_not_called()
+        entries = engine.ledger.read()
+        assert len(entries) == 2
+
+
+class TestCodeImproverTargetMemory:
+    @pytest.mark.asyncio
+    async def test_memory_section_included_when_available(self, tmp_path: Path) -> None:
+        from silkroute.autoresearch.targets.code import CodeImproverTarget
+
+        target = CodeImproverTarget(tmp_path, project_id="proj-1")
+
+        import silkroute.db.pool as pool_mod
+        pool_mod._pool = None
+        mock_pool = AsyncMock()
+
+        with patch.object(target, "_get_test_summary", new=AsyncMock(return_value="all pass")), \
+             patch.object(target, "_get_coverage_gaps", new=AsyncMock(return_value="")), \
+             patch(
+                 "silkroute.db.pool.asyncpg.create_pool",
+                 new_callable=AsyncMock, return_value=mock_pool,
+             ), \
+             patch(
+                 "silkroute.db.repositories.memories.recall_memories",
+                 new_callable=AsyncMock,
+                 return_value=[{"kind": "outcome", "content": "keep: improved something (score 0.9)"}],
+             ):
+            context = await target.build_context([])
+
+        pool_mod._pool = None
+
+        assert "## Relevant Past Learnings" in context
+        assert "improved something" in context
+
+    @pytest.mark.asyncio
+    async def test_memory_section_absent_when_pool_unavailable(self, tmp_path: Path) -> None:
+        from silkroute.autoresearch.targets.code import CodeImproverTarget
+
+        target = CodeImproverTarget(tmp_path)
+
+        import silkroute.db.pool as pool_mod
+        pool_mod._pool = None
+
+        with patch.object(target, "_get_test_summary", new=AsyncMock(return_value="all pass")), \
+             patch.object(target, "_get_coverage_gaps", new=AsyncMock(return_value="")), \
+             patch(
+                 "silkroute.db.pool.asyncpg.create_pool",
+                 new_callable=AsyncMock, side_effect=OSError("refused"),
+             ):
+            context = await target.build_context([])
+
+        pool_mod._pool = None
+
+        assert "## Relevant Past Learnings" not in context
+        assert "## Current Test Status" in context
+
+    @pytest.mark.asyncio
+    async def test_memory_section_absent_when_recall_raises(self, tmp_path: Path) -> None:
+        from silkroute.autoresearch.targets.code import CodeImproverTarget
+
+        target = CodeImproverTarget(tmp_path)
+
+        import silkroute.db.pool as pool_mod
+        pool_mod._pool = None
+        mock_pool = AsyncMock()
+
+        with patch.object(target, "_get_test_summary", new=AsyncMock(return_value="all pass")), \
+             patch.object(target, "_get_coverage_gaps", new=AsyncMock(return_value="")), \
+             patch(
+                 "silkroute.db.pool.asyncpg.create_pool",
+                 new_callable=AsyncMock, return_value=mock_pool,
+             ), \
+             patch(
+                 "silkroute.db.repositories.memories.recall_memories",
+                 new_callable=AsyncMock, side_effect=RuntimeError("db down"),
+             ):
+            context = await target.build_context([])
+
+        pool_mod._pool = None
+
+        assert "## Relevant Past Learnings" not in context
+        assert "## Current Test Status" in context
 
 
 # ── Code Improver Target ─────────────────────────────────────────────

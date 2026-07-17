@@ -15,6 +15,7 @@ from dataclasses import asdict
 from datetime import UTC, datetime
 from pathlib import Path
 
+import asyncpg
 from rich.console import Console
 
 from silkroute.autoresearch.ledger import Ledger, LedgerEntry
@@ -22,6 +23,7 @@ from silkroute.autoresearch.llm import ProposedChange, propose_change
 from silkroute.autoresearch.metrics import Metrics
 from silkroute.autoresearch.program import load_program
 from silkroute.autoresearch.targets.base import ResearchTarget
+from silkroute.config.settings import MemoryConfig
 
 logger = logging.getLogger(__name__)
 console = Console()
@@ -39,11 +41,13 @@ class ResearchEngine:
         model_id: str,
         project_root: Path,
         max_experiments: int = 0,
+        project_id: str = "default",
     ) -> None:
         self._target = target
         self._model_id = model_id
         self._root = project_root
         self._max_experiments = max_experiments  # 0 = infinite
+        self._project_id = project_id
         self._ledger = Ledger(
             project_root / ".silkroute" / "autoresearch" / "results.tsv"
         )
@@ -53,6 +57,8 @@ class ResearchEngine:
         self._branch_name: str = ""
         self._experiment_count = 0
         self._consecutive_crashes = 0
+        self._pool: asyncpg.Pool | None = None
+        self._memory_enabled = MemoryConfig().enabled
 
     @property
     def ledger(self) -> Ledger:
@@ -68,6 +74,16 @@ class ResearchEngine:
         self._setup_signal_handlers()
         self._branch_name = self._create_branch()
         self._ledger.ensure_exists()
+
+        # Persistent memory (optional — non-fatal if disabled or DB unavailable).
+        # Mirrors agent/loop.py's Step 3b pattern.
+        if self._memory_enabled:
+            try:
+                from silkroute.db.pool import get_pool
+
+                self._pool = await get_pool()
+            except (ImportError, asyncpg.PostgresError, OSError, TimeoutError) as exc:
+                logger.warning("autoresearch_memory_pool_unavailable: %s", exc)
 
         console.print("\n[bold]AutoResearch Engine[/bold]")
         console.print(f"  Target: {self._target.name}")
@@ -127,6 +143,7 @@ class ResearchEngine:
                     status="crash",
                     description=f"crash: {str(e)[:80]}",
                 ))
+                await self._record_outcome_memory("crash", str(e)[:80], 0.0, importance=0.2)
 
                 if self._consecutive_crashes >= _MAX_CONSECUTIVE_CRASHES:
                     console.print(
@@ -194,6 +211,9 @@ class ResearchEngine:
                 status="keep",
                 description=change.rationale,
             ))
+            await self._record_outcome_memory(
+                "keep", change.rationale, metrics.score, importance=0.6,
+            )
         else:
             # DISCARD — revert
             console.print(
@@ -209,6 +229,32 @@ class ResearchEngine:
                 status="discard",
                 description=change.rationale,
             ))
+            await self._record_outcome_memory(
+                "discard", change.rationale, metrics.score, importance=0.3,
+            )
+
+    async def _record_outcome_memory(
+        self, status: str, rationale: str, score: float, importance: float,
+    ) -> None:
+        """Persist an outcome memory. Fail-open — never affects git/ledger state.
+
+        Called after the ledger append (and any git commit/reset) has already
+        happened, so a memory-store failure here can't roll back real state.
+        """
+        if self._pool is None or not self._memory_enabled:
+            return
+        try:
+            from silkroute.db.repositories.memories import insert_memory
+
+            await insert_memory(
+                self._pool,
+                f"{status}: {rationale} (score {score:.4f})",
+                kind="outcome",
+                project_id=self._project_id,
+                importance=importance,
+            )
+        except Exception as exc:
+            logger.warning("autoresearch_memory_insert_failed: %s", exc)
 
     def _validate_change(self, change: ProposedChange) -> None:
         """Validate the proposed change is within bounds."""
