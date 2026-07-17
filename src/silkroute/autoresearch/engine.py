@@ -11,6 +11,7 @@ import asyncio
 import logging
 import signal
 import subprocess
+import time
 from dataclasses import asdict
 from datetime import UTC, datetime
 from pathlib import Path
@@ -30,6 +31,10 @@ console = Console()
 
 _MAX_CONSECUTIVE_CRASHES = 3
 _SLEEP_BETWEEN_EXPERIMENTS = 2  # seconds
+# Scores are ratios of ints, so identical repo states produce bit-identical
+# floats. This epsilon only guards against float noise; the smallest real
+# score delta (one test flipping out of ~1000) is ~6e-4, far above it.
+_SCORE_EPSILON = 1e-9
 
 
 class ResearchEngine:
@@ -42,12 +47,16 @@ class ResearchEngine:
         project_root: Path,
         max_experiments: int = 0,
         project_id: str = "default",
+        experiment_timeout_seconds: float = 600.0,
+        max_hours: float = 0.0,
     ) -> None:
         self._target = target
         self._model_id = model_id
         self._root = project_root
         self._max_experiments = max_experiments  # 0 = infinite
         self._project_id = project_id
+        self._experiment_timeout_seconds = experiment_timeout_seconds  # 0 = no per-exp cap
+        self._max_hours = max_hours  # 0 = no wall-clock cap
         self._ledger = Ledger(
             project_root / ".silkroute" / "autoresearch" / "results.tsv"
         )
@@ -59,6 +68,10 @@ class ResearchEngine:
         self._consecutive_crashes = 0
         self._pool: asyncpg.Pool | None = None
         self._memory_enabled = MemoryConfig().enabled
+        # Commit created by the current experiment, before it's known good.
+        # Rolled back by the crash/timeout handlers (a plain revert-if-dirty
+        # can't undo an already-made commit).
+        self._pending_commit: str | None = None
 
     @property
     def ledger(self) -> Ledger:
@@ -70,6 +83,13 @@ class ResearchEngine:
         1. Create experiment branch
         2. Establish baseline
         3. Loop: propose → apply → eval → keep/discard → log
+
+        Timeout note: the per-experiment timeout uses asyncio.wait_for, which
+        can only cancel at await points. The long awaits — propose_change() (LLM
+        call) and evaluate() (async subprocess) — are cancellable, which is
+        where time actually goes; the sub-second blocking git subprocess.run
+        calls are not. A cancelled pytest child may keep running until its own
+        inner 120s bound. The --hours cap is checked between experiments only.
         """
         self._setup_signal_handlers()
         self._branch_name = self._create_branch()
@@ -110,6 +130,8 @@ class ResearchEngine:
         ))
         console.print(f"  Baseline: {self._baseline.summary()}\n")
 
+        run_start = time.monotonic()
+
         # Main loop
         while not self._should_stop:
             if self._max_experiments > 0 and self._experiment_count >= self._max_experiments:
@@ -119,42 +141,83 @@ class ResearchEngine:
                 )
                 break
 
+            # Wall-clock cap (checked between experiments — may overshoot by up
+            # to one experiment's duration).
+            if self._max_hours > 0 and (time.monotonic() - run_start) >= self._max_hours * 3600:
+                console.print(
+                    f"\n[green]Reached wall-clock cap "
+                    f"(--hours {self._max_hours}). Stopping.[/green]"
+                )
+                break
+
             self._experiment_count += 1
             console.print(f"[bold]── Experiment {self._experiment_count} ──[/bold]")
 
             try:
-                await self._run_one_experiment()
+                await asyncio.wait_for(
+                    self._run_one_experiment(),
+                    timeout=self._experiment_timeout_seconds or None,
+                )
                 self._consecutive_crashes = 0
             except KeyboardInterrupt:
                 console.print("\n[yellow]Interrupted. Cleaning up...[/yellow]")
-                self._revert_if_dirty()
+                self._rollback_experiment()
                 break
+            except TimeoutError:
+                timeout_s = int(self._experiment_timeout_seconds)
+                console.print(f"  [red]TIMEOUT after {timeout_s}s[/red]")
+                if await self._handle_failed_experiment(
+                    f"crash: timeout after {timeout_s}s", "timeout",
+                ):
+                    break
             except Exception as e:
-                self._consecutive_crashes += 1
                 logger.exception("Experiment crashed: %s", e)
                 console.print(f"  [red]CRASH: {e}[/red]")
-                self._revert_if_dirty()
-
-                self._ledger.append(LedgerEntry(
-                    commit=self._git_short_hash(),
-                    score=0.0,
-                    pass_rate=0.0,
-                    coverage=0.0,
-                    status="crash",
-                    description=f"crash: {str(e)[:80]}",
-                ))
-                await self._record_outcome_memory("crash", str(e)[:80], 0.0, importance=0.2)
-
-                if self._consecutive_crashes >= _MAX_CONSECUTIVE_CRASHES:
-                    console.print(
-                        f"\n[red bold]{_MAX_CONSECUTIVE_CRASHES} consecutive crashes. "
-                        f"Pausing to avoid spinning.[/red bold]"
-                    )
+                if await self._handle_failed_experiment(
+                    f"crash: {str(e)[:80]}", str(e)[:80],
+                ):
                     break
 
             await asyncio.sleep(_SLEEP_BETWEEN_EXPERIMENTS)
 
         self._print_summary()
+
+    async def _handle_failed_experiment(self, description: str, memory_reason: str) -> bool:
+        """Shared crash/timeout handling. Returns True if the circuit breaker tripped.
+
+        Rolls back any pending commit, logs a crash ledger row + memory, and
+        bumps the consecutive-crash counter.
+        """
+        self._consecutive_crashes += 1
+        self._rollback_experiment()
+
+        self._ledger.append(LedgerEntry(
+            commit=self._git_short_hash(),
+            score=0.0,
+            pass_rate=0.0,
+            coverage=0.0,
+            status="crash",
+            description=description,
+        ))
+        await self._record_outcome_memory("crash", memory_reason, 0.0, importance=0.2)
+
+        if self._consecutive_crashes >= _MAX_CONSECUTIVE_CRASHES:
+            console.print(
+                f"\n[red bold]{_MAX_CONSECUTIVE_CRASHES} consecutive crashes. "
+                f"Pausing to avoid spinning.[/red bold]"
+            )
+            return True
+        return False
+
+    def _rollback_experiment(self) -> None:
+        """Undo an in-flight experiment: discard uncommitted edits and, if the
+        experiment already committed, reset that commit off the branch.
+        """
+        self._revert_if_dirty()
+        if self._pending_commit and self._git_short_hash() == self._pending_commit:
+            self._git_reset()
+        self._pending_commit = None
+        self._target.invalidate_eval_cache()
 
     async def stop(self) -> None:
         """Signal graceful shutdown after current experiment."""
@@ -189,6 +252,7 @@ class ResearchEngine:
             f"experiment: {change.rationale}",
             files=[change.file_path],
         )
+        self._pending_commit = commit_hash
 
         # Evaluate
         console.print("  [dim]Evaluating...[/dim]")
@@ -196,12 +260,23 @@ class ResearchEngine:
         console.print(f"  Result: {metrics.summary()}")
 
         # Compare to baseline
-        if metrics.is_better_than(self._baseline):
+        keep, is_simplification = self._should_keep(metrics, change)
+        if keep:
             # KEEP — advance branch
-            console.print(
-                f"  [green bold]KEEP[/green bold] — score improved "
-                f"{self._baseline.score:.4f} → {metrics.score:.4f}"
-            )
+            if is_simplification:
+                old_n = change.old_code.count("\n")
+                new_n = change.new_code.count("\n")
+                console.print(
+                    f"  [green bold]KEEP[/green bold] — equal score, simpler code "
+                    f"({old_n} → {new_n} lines)"
+                )
+                description = f"simplify: {change.rationale}"
+            else:
+                console.print(
+                    f"  [green bold]KEEP[/green bold] — score improved "
+                    f"{self._baseline.score:.4f} → {metrics.score:.4f}"
+                )
+                description = change.rationale
             self._baseline = metrics
             self._ledger.append(LedgerEntry(
                 commit=commit_hash,
@@ -209,10 +284,10 @@ class ResearchEngine:
                 pass_rate=metrics.pass_rate,
                 coverage=metrics.coverage_pct,
                 status="keep",
-                description=change.rationale,
+                description=description,
             ))
             await self._record_outcome_memory(
-                "keep", change.rationale, metrics.score, importance=0.6,
+                "keep", description, metrics.score, importance=0.6,
             )
         else:
             # DISCARD — revert
@@ -221,6 +296,8 @@ class ResearchEngine:
                 f"{metrics.score:.4f} <= baseline {self._baseline.score:.4f}"
             )
             self._git_reset()
+            # Cache holds the discarded candidate's eval output — stale now
+            self._target.invalidate_eval_cache()
             self._ledger.append(LedgerEntry(
                 commit=commit_hash,
                 score=metrics.score,
@@ -232,6 +309,23 @@ class ResearchEngine:
             await self._record_outcome_memory(
                 "discard", change.rationale, metrics.score, importance=0.3,
             )
+        self._pending_commit = None
+
+    def _should_keep(self, metrics: Metrics, change: ProposedChange) -> tuple[bool, bool]:
+        """Decide whether to keep a candidate. Returns (keep, is_simplification).
+
+        Keep if the score strictly improved, OR — mirroring Karpathy's elegance
+        rule — the score is equal (within epsilon) but the change strictly
+        reduced line count. "A small improvement that adds ugly complexity is
+        not worth it": deleting code while holding the score is a win.
+        """
+        if metrics.is_better_than(self._baseline):
+            return True, False
+        equal_score = abs(metrics.score - self._baseline.score) <= _SCORE_EPSILON
+        simpler = change.new_code.count("\n") < change.old_code.count("\n")
+        if equal_score and simpler:
+            return True, True
+        return False, False
 
     async def _record_outcome_memory(
         self, status: str, rationale: str, score: float, importance: float,
