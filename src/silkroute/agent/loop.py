@@ -25,6 +25,7 @@ from rich.rule import Rule
 
 from silkroute.agent.classifier import classify_task
 from silkroute.agent.cost_guard import check_budget, check_global_budget
+from silkroute.agent.memory import format_memory_block, make_remember_tool, recall_for_session
 from silkroute.agent.prompts import build_system_prompt
 from silkroute.agent.router import (
     get_litellm_model_string,
@@ -34,7 +35,7 @@ from silkroute.agent.router import (
 )
 from silkroute.agent.session import AgentSession, Iteration, SessionStatus, ToolCall
 from silkroute.agent.tools import create_default_registry, parse_tool_arguments
-from silkroute.config.settings import AgentConfig, BudgetConfig, MCPConfig, ModelTier
+from silkroute.config.settings import AgentConfig, BudgetConfig, MCPConfig, MemoryConfig, ModelTier
 from silkroute.providers.models import ModelSpec, estimate_cost
 
 log = structlog.get_logger()
@@ -171,8 +172,22 @@ async def run_agent(
 
     pending_db_tasks: list[asyncio.Task[None]] = []
 
+    # Recall persistent memory (optional — non-fatal if disabled or DB unavailable)
+    memory_config = MemoryConfig()
+    recalled_memories = await recall_for_session(pool, project_id, memory_config)
+    memories_block = format_memory_block(recalled_memories)
+    if recalled_memories and pool is not None:
+        from silkroute.db.repositories.memories import mark_recalled
+
+        pending_db_tasks.append(asyncio.create_task(
+            mark_recalled(pool, [m["id"] for m in recalled_memories]),
+        ))
+
     # Step 4: Set up tools and system prompt (sandbox shell to workspace)
     registry = create_default_registry(workspace_dir=workspace_dir)
+
+    if pool is not None and memory_config.enabled:
+        registry.register(make_remember_tool(pool, project_id, session.id))
 
     # MCP bridge (optional — non-fatal if the server or dependency is unavailable)
     mcp_stack = None
@@ -207,6 +222,7 @@ async def run_agent(
         max_iterations=max_iterations,
         current_iteration=1,
         task=task,
+        memories_block=memories_block,
     )
 
     messages: list[dict[str, Any]] = [{"role": "system", "content": system_prompt}]
@@ -260,6 +276,7 @@ async def run_agent(
             max_iterations=max_iterations,
             current_iteration=i,
             task=task,
+            memories_block=memories_block,
         )
 
         # LLM call
