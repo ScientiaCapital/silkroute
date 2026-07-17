@@ -30,7 +30,7 @@ Maximize the composite quality score:
 1. **Start with low-hanging fruit**: Look at failing tests first — fixing them gives the biggest score boost (60% weight)
 2. **Target uncovered lines**: The coverage report shows which files and lines are uncovered. Adding a missing `return` or handling an uncaught exception can boost coverage
 3. **Small beats ambitious**: A 2-line fix that passes tests beats a 40-line refactor that breaks something
-4. **Simplification wins**: If you can remove code and maintain the score, that's a great outcome — simpler code is better code
+4. **Simplification wins**: An equal-score change that *reduces line count* is KEPT, not discarded — "a small improvement that adds ugly complexity is not worth it." If you can delete lines while holding the score steady, that's a winning experiment. Simpler code is better code.
 5. **Learn from history**: Look at recent experiment results. If similar approaches were discarded, try something different
 6. **Lint matters least**: Only fix lint issues if you're already touching that code for another reason. Don't make lint-only changes
 

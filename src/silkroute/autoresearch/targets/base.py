@@ -25,6 +25,10 @@ class ResearchTarget(Protocol):
         """Run the target's evaluation and return metrics."""
         ...
 
+    def invalidate_eval_cache(self) -> None:
+        """Drop any cached evaluation state (called after a git reset)."""
+        ...
+
     async def build_context(self, recent_entries: list[dict]) -> str:
         """Build context string for the LLM researcher.
 

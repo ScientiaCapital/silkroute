@@ -1,4 +1,9 @@
-"""LLM interaction — propose code changes via Chinese LLMs through OpenRouter."""
+"""LLM interaction — propose code changes via Chinese LLMs.
+
+The researcher runs through OpenRouter by default, or fully local via Ollama
+when the model id starts with "ollama/" (e.g. "ollama/qwen2.5:14b") — a $0,
+zero-cloud research loop, matching how agent/loop.py reaches local models.
+"""
 
 from __future__ import annotations
 
@@ -10,6 +15,24 @@ from pathlib import Path
 from silkroute.providers.openrouter import create_openrouter_model
 
 logger = logging.getLogger(__name__)
+
+# Local models get a much smaller file listing (see propose_change): a few
+# files, each short enough to show complete so the model never guesses at
+# truncated code.
+_LOCAL_MAX_FILES = 4
+_LOCAL_MAX_LINES = 150
+# A 14B's JSON-schema adherence is stochastic at temperature 0.7 — it emits a
+# valid proposal most of the time but occasionally the wrong shape. Re-prompt a
+# few times before giving up (cloud models are reliable and don't retry).
+_LOCAL_MAX_ATTEMPTS = 4
+
+
+def _line_count(fp: Path) -> int:
+    """Line count of a file, or a large sentinel if unreadable (so it's skipped)."""
+    try:
+        return len(fp.read_text().splitlines())
+    except OSError:
+        return 10**9
 
 _SYSTEM_TEMPLATE = """\
 {program}
@@ -28,7 +51,9 @@ The JSON must have exactly these fields:
 
 Rules:
 - Propose exactly ONE change per response.
-- The old_code must be an exact substring of the current file contents.
+- old_code MUST be copied verbatim from a file shown below. Prefer the SMALLEST
+  unique snippet — often a single line. Do NOT guess or reconstruct code you
+  cannot see in full; only reference code that appears in the listing.
 - The new_code must be different from old_code.
 - Keep changes under {max_lines} lines of diff.
 - Only modify files within: {allowed_paths}
@@ -68,7 +93,8 @@ async def propose_change(
     """Ask a Chinese LLM to propose one code change.
 
     Args:
-        model_id: OpenRouter model identifier.
+        model_id: Model identifier. An OpenRouter slug (e.g. "deepseek/deepseek-v3.2"),
+            or "ollama/<model>" for fully-local inference (no cloud, no API key).
         program: Contents of the program.md file.
         context: Current state (test output, coverage, recent history).
         target_files: Files the agent can see and edit.
@@ -81,11 +107,7 @@ async def propose_change(
     Raises:
         ValueError: If the LLM response can't be parsed as valid JSON.
     """
-    llm = create_openrouter_model(
-        model_id=model_id,
-        temperature=0.7,  # Creative exploration, not deterministic
-        max_tokens=4096,
-    )
+    is_local = model_id.startswith("ollama/")
 
     system_msg = _SYSTEM_TEMPLATE.format(
         program=program,
@@ -93,7 +115,18 @@ async def propose_change(
         allowed_paths=", ".join(allowed_paths),
     )
 
-    file_listing = _build_file_listing(target_files)
+    # Local models (e.g. a 14B) lose output-schema discipline when the prompt
+    # gets large — at ~70KB they abandon the requested JSON shape. They also
+    # hallucinate old_code for any file shown truncated ("...assume the rest").
+    # So a local researcher gets a few SMALL files shown COMPLETE (never
+    # truncated); cloud models handle the full listing fine.
+    if is_local:
+        small = [f for f in target_files if _line_count(f) <= _LOCAL_MAX_LINES]
+        file_listing = _build_file_listing(
+            small[:_LOCAL_MAX_FILES], max_lines_per_file=_LOCAL_MAX_LINES,
+        )
+    else:
+        file_listing = _build_file_listing(target_files)
     user_msg = _USER_TEMPLATE.format(context=context, file_listing=file_listing)
 
     messages = [
@@ -101,12 +134,60 @@ async def propose_change(
         {"role": "user", "content": user_msg},
     ]
 
+    if is_local:
+        return await _propose_local(model_id, messages)
+
+    llm = create_openrouter_model(
+        model_id=model_id,
+        temperature=0.7,  # Creative exploration, not deterministic
+        max_tokens=4096,
+    )
     response = await llm.ainvoke(messages)
     content = response.content
     if not isinstance(content, str):
         content = str(content)
-
     return _parse_response(content)
+
+
+async def _propose_local(model_id: str, messages: list[dict]) -> ProposedChange:
+    """Invoke a local model, re-prompting on a mis-shaped response.
+
+    Raises the last parse error if every attempt fails (engine treats it as a
+    crash, exactly as before — this only reduces how often that happens).
+    """
+    last_err: ValueError | None = None
+    for attempt in range(1, _LOCAL_MAX_ATTEMPTS + 1):
+        content = await _invoke_ollama(model_id, messages)
+        try:
+            return _parse_response(content)
+        except ValueError as e:
+            last_err = e
+            logger.warning(
+                "local propose attempt %d/%d failed: %s", attempt, _LOCAL_MAX_ATTEMPTS, e,
+            )
+    assert last_err is not None
+    raise last_err
+
+
+async def _invoke_ollama(model_id: str, messages: list[dict]) -> str:
+    """Call a local Ollama model via litellm. No API key, no cloud.
+
+    Mirrors agent/loop.py's litellm usage; api_base honors SILKROUTE_OLLAMA_BASE_URL.
+    """
+    import litellm
+
+    from silkroute.config.settings import ProviderConfig
+
+    litellm.suppress_debug_info = True
+    response = await litellm.acompletion(
+        model=model_id,
+        messages=messages,
+        api_base=ProviderConfig().ollama_base_url,
+        temperature=0.7,
+        max_tokens=4096,
+        response_format={"type": "json_object"},  # litellm maps to Ollama format:json
+    )
+    return response.choices[0].message.content or ""
 
 
 def _build_file_listing(files: list[Path], max_lines_per_file: int = 200) -> str:
@@ -145,7 +226,20 @@ def _parse_response(content: str) -> ProposedChange:
     try:
         data = json.loads(text)
     except json.JSONDecodeError as e:
-        raise ValueError(f"LLM response is not valid JSON: {e}\nResponse: {text[:500]}") from e
+        # Local models often prepend prose ("Here is the JSON: {...}"). Retry on
+        # the outermost {...} span before giving up.
+        start, end = text.find("{"), text.rfind("}")
+        if start != -1 and end > start:
+            try:
+                data = json.loads(text[start : end + 1])
+            except json.JSONDecodeError:
+                raise ValueError(
+                    f"LLM response is not valid JSON: {e}\nResponse: {text[:500]}"
+                ) from e
+        else:
+            raise ValueError(
+                f"LLM response is not valid JSON: {e}\nResponse: {text[:500]}"
+            ) from e
 
     required = {"file_path", "old_code", "new_code", "rationale"}
     missing = required - set(data.keys())
