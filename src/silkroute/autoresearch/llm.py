@@ -16,6 +16,9 @@ from silkroute.providers.openrouter import create_openrouter_model
 
 logger = logging.getLogger(__name__)
 
+# Local models get a much smaller file listing (see propose_change).
+_LOCAL_MAX_FILES = 4
+
 _SYSTEM_TEMPLATE = """\
 {program}
 
@@ -87,13 +90,22 @@ async def propose_change(
     Raises:
         ValueError: If the LLM response can't be parsed as valid JSON.
     """
+    is_local = model_id.startswith("ollama/")
+
     system_msg = _SYSTEM_TEMPLATE.format(
         program=program,
         max_lines=max_diff_lines,
         allowed_paths=", ".join(allowed_paths),
     )
 
-    file_listing = _build_file_listing(target_files)
+    # Local models (e.g. a 14B) lose output-schema discipline when the prompt
+    # gets large — at ~70KB they abandon the requested JSON shape and emit a
+    # hallucinated structure. Cloud models handle the full listing fine. So we
+    # send far fewer, shorter files to a local researcher.
+    if is_local:
+        file_listing = _build_file_listing(target_files[:_LOCAL_MAX_FILES], max_lines_per_file=120)
+    else:
+        file_listing = _build_file_listing(target_files)
     user_msg = _USER_TEMPLATE.format(context=context, file_listing=file_listing)
 
     messages = [
@@ -101,7 +113,7 @@ async def propose_change(
         {"role": "user", "content": user_msg},
     ]
 
-    if model_id.startswith("ollama/"):
+    if is_local:
         content = await _invoke_ollama(model_id, messages)
     else:
         llm = create_openrouter_model(

@@ -281,6 +281,39 @@ class TestOllamaResearcher:
         assert change.rationale == "return a value"
         mock_create.assert_called_once()
 
+    @pytest.mark.asyncio
+    async def test_local_path_reduces_file_listing(self, tmp_path: Path) -> None:
+        """A local model gets far fewer files than the 20 the engine passes —
+        a 14B loses output-schema discipline on a ~70KB prompt."""
+        from silkroute.autoresearch import llm as llm_mod
+
+        files = []
+        for i in range(20):
+            f = tmp_path / f"mod{i}.py"
+            f.write_text(f"# module {i}\ndef f{i}():\n    return {i}\n")
+            files.append(f)
+
+        canned = json.dumps({
+            "file_path": "mod0.py", "old_code": "return 0", "new_code": "return 1",
+            "rationale": "x",
+        })
+        captured = {}
+
+        async def _fake_invoke(model_id, messages):
+            captured["user"] = messages[1]["content"]
+            return canned
+
+        with patch.object(llm_mod, "_invoke_ollama", new=_fake_invoke):
+            await propose_change(
+                model_id="ollama/qwen2.5:14b",
+                program="p", context="c", target_files=files,
+                allowed_paths=["src/"], max_diff_lines=50,
+            )
+
+        # Only the first _LOCAL_MAX_FILES files appear in the prompt.
+        assert "### " + str(files[0]) in captured["user"]
+        assert "### " + str(files[llm_mod._LOCAL_MAX_FILES]) not in captured["user"]
+
 
 # ── Program Loading ──────────────────────────────────────────────────
 
