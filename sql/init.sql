@@ -259,7 +259,9 @@ CREATE INDEX IF NOT EXISTS idx_skill_executions_created ON skill_executions(crea
 -- ============================================================
 CREATE TABLE IF NOT EXISTS agent_memories (
     id                BIGSERIAL PRIMARY KEY,
-    project_id        TEXT REFERENCES projects(id),  -- NULL = global scope
+    project_id        TEXT,  -- free-form scope label, NULL = global; no FK —
+                              -- callers (e.g. AutoResearch) may label memories
+                              -- under project ids that aren't registered projects
     kind              TEXT NOT NULL DEFAULT 'fact'
         CHECK (kind IN ('fact', 'preference', 'outcome')),
     content           TEXT NOT NULL,

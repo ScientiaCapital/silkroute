@@ -12,7 +12,10 @@ import logging
 import re
 from pathlib import Path
 
+import asyncpg
+
 from silkroute.autoresearch.metrics import Metrics
+from silkroute.config.settings import MemoryConfig
 
 logger = logging.getLogger(__name__)
 
@@ -24,8 +27,9 @@ class CodeImproverTarget:
     allowed_paths = ["src/silkroute/"]
     max_diff_lines = 50
 
-    def __init__(self, project_root: Path) -> None:
+    def __init__(self, project_root: Path, project_id: str = "default") -> None:
         self._root = project_root
+        self._project_id = project_id
 
     async def evaluate(self) -> Metrics:
         """Run pytest with coverage and ruff, return composite metrics."""
@@ -65,7 +69,37 @@ class CodeImproverTarget:
                 )
             parts.append(history)
 
+        # Past learnings from persistent memory (this project + global)
+        memory_section = await self._build_memory_section()
+        if memory_section:
+            parts.append(memory_section)
+
         return "\n\n".join(parts)
+
+    async def _build_memory_section(self) -> str:
+        """Recall recent agent_memories outcomes. Fail-open — never raises."""
+        if not MemoryConfig().enabled:
+            return ""
+        try:
+            from silkroute.db.pool import get_pool
+
+            pool = await get_pool()
+        except (ImportError, asyncpg.PostgresError, OSError, TimeoutError) as exc:
+            logger.warning("code_target_memory_pool_unavailable: %s", exc)
+            return ""
+        if pool is None:
+            return ""
+        try:
+            from silkroute.db.repositories.memories import recall_memories
+
+            memories = await recall_memories(pool, self._project_id, limit=5)
+        except Exception as exc:
+            logger.warning("code_target_memory_recall_failed: %s", exc)
+            return ""
+        if not memories:
+            return ""
+        lines = "\n".join(f"- [{m['kind']}] {m['content']}" for m in memories)
+        return f"## Relevant Past Learnings\n{lines}"
 
     def get_editable_files(self) -> list[Path]:
         """Return Python files in src/silkroute/ that the agent can edit."""
