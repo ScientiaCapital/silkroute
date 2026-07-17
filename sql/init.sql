@@ -3,6 +3,19 @@
 -- PostgreSQL 16+
 
 -- ============================================================
+-- Schema Migrations — tracks which sql/migrations/*.sql files have
+-- been applied by `silkroute db migrate` (see db/migrations.py).
+-- This file (init.sql) is the fresh-install bootstrap and already
+-- contains every table below; migrations only matter for existing
+-- databases catching up to schema changes made after their install.
+-- ============================================================
+CREATE TABLE IF NOT EXISTS schema_migrations (
+    version     INTEGER PRIMARY KEY,
+    name        TEXT NOT NULL,
+    applied_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- ============================================================
 -- Projects — each repo or workstream gets budget governance
 -- ============================================================
 CREATE TABLE IF NOT EXISTS projects (

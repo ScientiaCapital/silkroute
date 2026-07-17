@@ -492,3 +492,105 @@ class TestMemoryCommands:
         result = runner.invoke(main, ["memory", "list"])
         assert result.exit_code == 1
         assert "Error" in result.output
+
+
+class TestDbMigrateCommands:
+    def _mock_pool(self) -> MagicMock:
+        pool = MagicMock()
+        pool.close = AsyncMock()
+        return pool
+
+    @patch("silkroute.config.settings.load_settings")
+    @patch("silkroute.db.migrations.list_pending_migrations", new_callable=AsyncMock)
+    @patch("asyncpg.create_pool", new_callable=AsyncMock)
+    def test_db_status_up_to_date(
+        self,
+        mock_create_pool: AsyncMock,
+        mock_list_pending: AsyncMock,
+        mock_load_settings: MagicMock,
+        test_settings: SilkRouteSettings,
+    ) -> None:
+        mock_load_settings.return_value = test_settings
+        mock_create_pool.return_value = self._mock_pool()
+        mock_list_pending.return_value = []
+
+        result = runner.invoke(main, ["db", "status"])
+        assert result.exit_code == 0
+        assert "up to date" in result.output
+
+    @patch("silkroute.config.settings.load_settings")
+    @patch("silkroute.db.migrations.list_pending_migrations", new_callable=AsyncMock)
+    @patch("asyncpg.create_pool", new_callable=AsyncMock)
+    def test_db_status_pending(
+        self,
+        mock_create_pool: AsyncMock,
+        mock_list_pending: AsyncMock,
+        mock_load_settings: MagicMock,
+        test_settings: SilkRouteSettings,
+    ) -> None:
+        from silkroute.db.migrations import Migration
+
+        mock_load_settings.return_value = test_settings
+        mock_create_pool.return_value = self._mock_pool()
+        mock_list_pending.return_value = [
+            Migration(version=1, name="0001_agent_memories.sql", path=None)
+        ]
+
+        result = runner.invoke(main, ["db", "status"])
+        assert result.exit_code == 0
+        assert "0001_agent_memories.sql" in result.output
+
+    @patch("silkroute.config.settings.load_settings")
+    @patch("silkroute.db.migrations.apply_migrations", new_callable=AsyncMock)
+    @patch("asyncpg.create_pool", new_callable=AsyncMock)
+    def test_db_migrate_applies_pending(
+        self,
+        mock_create_pool: AsyncMock,
+        mock_apply: AsyncMock,
+        mock_load_settings: MagicMock,
+        test_settings: SilkRouteSettings,
+    ) -> None:
+        from silkroute.db.migrations import Migration
+
+        mock_load_settings.return_value = test_settings
+        mock_create_pool.return_value = self._mock_pool()
+        mock_apply.return_value = [
+            Migration(version=1, name="0001_agent_memories.sql", path=None)
+        ]
+
+        result = runner.invoke(main, ["db", "migrate"])
+        assert result.exit_code == 0
+        assert "Applied 1 migration" in result.output
+
+    @patch("silkroute.config.settings.load_settings")
+    @patch("silkroute.db.migrations.apply_migrations", new_callable=AsyncMock)
+    @patch("asyncpg.create_pool", new_callable=AsyncMock)
+    def test_db_migrate_up_to_date(
+        self,
+        mock_create_pool: AsyncMock,
+        mock_apply: AsyncMock,
+        mock_load_settings: MagicMock,
+        test_settings: SilkRouteSettings,
+    ) -> None:
+        mock_load_settings.return_value = test_settings
+        mock_create_pool.return_value = self._mock_pool()
+        mock_apply.return_value = []
+
+        result = runner.invoke(main, ["db", "migrate"])
+        assert result.exit_code == 0
+        assert "already up to date" in result.output
+
+    @patch("silkroute.config.settings.load_settings")
+    @patch("asyncpg.create_pool", new_callable=AsyncMock)
+    def test_db_migrate_error(
+        self,
+        mock_create_pool: AsyncMock,
+        mock_load_settings: MagicMock,
+        test_settings: SilkRouteSettings,
+    ) -> None:
+        mock_load_settings.return_value = test_settings
+        mock_create_pool.side_effect = Exception("connection refused")
+
+        result = runner.invoke(main, ["db", "migrate"])
+        assert result.exit_code == 1
+        assert "Error" in result.output
