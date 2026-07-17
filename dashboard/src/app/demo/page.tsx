@@ -1,5 +1,6 @@
-import { PIPELINE, PEARL, CONVERSATION, DEMO_META } from "@/lib/demo";
-import type { PipelineStage, DemoTurn } from "@/lib/demo";
+import { PIPELINE, DEMO_META } from "@/lib/demo";
+import type { PipelineStage } from "@/lib/demo";
+import LiveRoomView from "./LiveRoomView";
 
 function StageCard({ stage, index }: { stage: PipelineStage; index: number }) {
   const isDevice = stage.id === "device";
@@ -34,23 +35,6 @@ function Arrow() {
   return (
     <div className="hidden lg:flex items-center text-neutral-700 px-1 select-none" aria-hidden>
       <span className="text-xl">→</span>
-    </div>
-  );
-}
-
-function Turn({ turn }: { turn: DemoTurn }) {
-  if (turn.role === "tool") {
-    return (
-      <p className="font-mono text-xs text-amber-400/80 pl-1">{turn.text}</p>
-    );
-  }
-  const isUser = turn.role === "user";
-  return (
-    <div className={isUser ? "" : "border-l-2 border-amber-500/40 pl-3"}>
-      <p className="text-xs uppercase tracking-wide text-neutral-600 mb-1">
-        {isUser ? "You" : "SilkRoute"}
-      </p>
-      <p className={isUser ? "text-neutral-200" : "text-neutral-300 leading-relaxed"}>{turn.text}</p>
     </div>
   );
 }
@@ -95,57 +79,13 @@ export default function DemoPage() {
         ))}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Conversation */}
-        <div className="sr-fade-up bg-neutral-900 border border-neutral-800 rounded-xl p-6" style={{ animationDelay: "480ms" }}>
-          <h2 className="text-lg font-semibold mb-4">What the agent did</h2>
-          <div className="flex flex-col gap-4">
-            {CONVERSATION.map((turn, i) => (
-              <Turn key={i} turn={turn} />
-            ))}
-          </div>
-        </div>
-
-        {/* Device status */}
-        <div className="sr-fade-up bg-neutral-900 border border-neutral-800 rounded-xl p-6" style={{ animationDelay: "560ms" }}>
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold">{PEARL.room}</h2>
-            <span className="inline-flex items-center gap-2 text-xs px-2.5 py-1 rounded-full text-amber-400 bg-amber-400/10">
-              <span className="sr-rec-dot w-2 h-2 rounded-full bg-amber-400" />
-              {PEARL.state}
-            </span>
-          </div>
-          <dl className="grid grid-cols-2 gap-y-4 gap-x-4 text-sm">
-            <div>
-              <dt className="text-neutral-500 text-xs">Device</dt>
-              <dd className="font-mono">{PEARL.name}</dd>
-            </div>
-            <div>
-              <dt className="text-neutral-500 text-xs">Model · FW</dt>
-              <dd className="font-mono">{PEARL.model} · {PEARL.firmware}</dd>
-            </div>
-            <div>
-              <dt className="text-neutral-500 text-xs">Recorder</dt>
-              <dd>{PEARL.recorderName}</dd>
-            </div>
-            <div>
-              <dt className="text-neutral-500 text-xs">Duration</dt>
-              <dd className="font-mono">{PEARL.durationLabel}</dd>
-            </div>
-            <div className="col-span-2">
-              <dt className="text-neutral-500 text-xs">File</dt>
-              <dd className="font-mono text-neutral-300 break-all">{PEARL.filename}</dd>
-            </div>
-            <div className="col-span-2">
-              <dt className="text-neutral-500 text-xs">Input signal</dt>
-              <dd className="font-mono text-neutral-300">{PEARL.inputSignal}</dd>
-            </div>
-          </dl>
-        </div>
-      </div>
+      {/* Live agent trace + device status (streams from the API; falls back to
+          static fixtures when the API is unreachable). */}
+      <LiveRoomView />
 
       <p className="text-neutral-600 text-xs mt-8">
-        Static demo — canned Pearl-2-Room320B data. Run it live:{" "}
+        Live from the API when reachable (<span className="font-mono text-neutral-500">/demo/stream</span> ·
+        SSE) — otherwise canned Pearl-2-Room320B fixtures. Run the agent yourself:{" "}
         <span className="font-mono text-neutral-500">python demo/agent_ready_av_demo.py --mock-mcp</span>
       </p>
     </div>

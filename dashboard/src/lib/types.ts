@@ -105,3 +105,37 @@ export interface SupervisorSession {
   updated_at: string;
   error: string;
 }
+
+// --- AV/Edge demo (GET /demo/room, GET /demo/stream) ---
+
+export interface RoomState {
+  device_name: string;
+  model: string;
+  firmware: string;
+  state: string;
+  uptime_seconds: number;
+  recorder_name: string;
+  recorder_state: string;
+  duration_seconds: number;
+  filename: string;
+  cpu_percent: number;
+  storage_free_bytes: number;
+  devices_online: number;
+  devices_total: number;
+  recorders_active: number;
+  healthy: boolean;
+  source: string;
+}
+
+// One frame of the SSE agent trace. `type` selects which `data` shape applies.
+export type TraceEventType =
+  | "session_start"
+  | "thought"
+  | "tool_call"
+  | "answer"
+  | "session_complete";
+
+export interface TraceEvent {
+  type: TraceEventType;
+  data: Record<string, unknown>;
+}

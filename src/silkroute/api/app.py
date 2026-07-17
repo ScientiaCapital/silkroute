@@ -118,6 +118,7 @@ def create_app(settings: SilkRouteSettings | None = None) -> FastAPI:
     # Register routers
     from silkroute.api.routes.budget import router as budget_router
     from silkroute.api.routes.context7 import router as context7_router
+    from silkroute.api.routes.demo import router as demo_router
     from silkroute.api.routes.health import router as health_router
     from silkroute.api.routes.memories import router as memories_router
     from silkroute.api.routes.models_api import router as models_router
@@ -130,6 +131,7 @@ def create_app(settings: SilkRouteSettings | None = None) -> FastAPI:
     app.include_router(health_router)
     app.include_router(tasks_router)
     app.include_router(runtime_router)
+    app.include_router(demo_router)
     app.include_router(models_router)
     app.include_router(budget_router)
     app.include_router(projects_router)
