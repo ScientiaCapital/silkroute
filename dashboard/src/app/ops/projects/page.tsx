@@ -38,10 +38,6 @@ export default async function ProjectsPage() {
 }
 
 function ProjectCard({ project }: { project: Project }) {
-  const budgetPct = project.budget_monthly_usd > 0
-    ? 0  // Will show actual spend when budget API is wired
-    : 0;
-
   return (
     <div className="bg-neutral-900 border border-neutral-800 rounded-xl p-5 hover:border-neutral-700 transition-colors">
       <div className="flex items-start justify-between mb-3">
