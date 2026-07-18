@@ -29,6 +29,16 @@
 # without over-firing on a healthy room.
 
 rules:
+  - id: device-offline
+    when:
+      device_state: offline
+    action: reboot_device
+
+  - id: storage-unmounted
+    when:
+      storage_mounted: false
+    action: remount_storage
+
   - id: recorder-not-recording
     when:
       device_state: online
@@ -39,6 +49,11 @@ rules:
     when:
       input_has_signal: false
     action: restart_input
+
+  - id: cpu-overload
+    when:
+      cpu_percent: {gte: 90}
+    action: throttle_channels
 
   - id: storage-full
     when:
