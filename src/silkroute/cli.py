@@ -656,7 +656,9 @@ def research_results(last: int) -> None:
     entries = ledger.read()
 
     if not entries:
-        console.print("[yellow]No experiments found. Run 'silkroute research start' first.[/yellow]")
+        console.print(
+            "[yellow]No experiments found. Run 'silkroute research start' first.[/yellow]",
+        )
         return
 
     table = Table(title="AutoResearch Results")
@@ -687,7 +689,10 @@ def research_results(last: int) -> None:
 
     counts = ledger.count()
     best = ledger.best()
-    console.print(f"\n  Total: {counts['total']} | Kept: {counts['keep']} | Discarded: {counts['discard']} | Crashed: {counts['crash']}")
+    console.print(
+        f"\n  Total: {counts['total']} | Kept: {counts['keep']} | "
+        f"Discarded: {counts['discard']} | Crashed: {counts['crash']}",
+    )
     if best:
         console.print(f"  Best: {best.score:.4f} ({best.description})")
 
@@ -708,10 +713,10 @@ def research_status() -> None:
     branch = result.stdout.strip()
 
     if branch.startswith("autoresearch/"):
-        console.print(f"[bold]AutoResearch Active[/bold]")
+        console.print("[bold]AutoResearch Active[/bold]")
         console.print(f"  Branch: [cyan]{branch}[/cyan]")
     else:
-        console.print(f"[bold]AutoResearch[/bold]")
+        console.print("[bold]AutoResearch[/bold]")
         console.print(f"  Branch: {branch} [dim](not on research branch)[/dim]")
 
     ledger = Ledger(Path.cwd() / ".silkroute" / "autoresearch" / "results.tsv")
@@ -719,7 +724,10 @@ def research_status() -> None:
         counts = ledger.count()
         best = ledger.best()
         console.print(f"  Experiments: {counts['total']}")
-        console.print(f"  Kept: {counts['keep']} | Discarded: {counts['discard']} | Crashed: {counts['crash']}")
+        console.print(
+            f"  Kept: {counts['keep']} | Discarded: {counts['discard']} | "
+            f"Crashed: {counts['crash']}",
+        )
         if best:
             console.print(f"  Best score: {best.score:.4f} ({best.description})")
     else:
