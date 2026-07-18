@@ -24,40 +24,16 @@ from __future__ import annotations
 
 import json
 import logging
-import operator
 from pathlib import Path
 from typing import Any
 
 import asyncpg
-import yaml
 
 from silkroute.autoresearch.metrics import Metrics
+from silkroute.autoresearch.playbook import decide_action, load_playbook
 from silkroute.config.settings import MemoryConfig
 
 logger = logging.getLogger(__name__)
-
-# Remediation actions the playbook may prescribe. `none` = no action needed.
-_KNOWN_ACTIONS = frozenset(
-    {
-        "start_recorder",
-        "restart_input",
-        "rotate_recordings",
-        "remount_storage",
-        "reboot_device",
-        "throttle_channels",
-        "none",
-    }
-)
-
-# Comparison operators the `when` DSL supports, as safe callables (no eval).
-_COMPARATORS = {
-    "eq": operator.eq,
-    "ne": operator.ne,
-    "gt": operator.gt,
-    "lt": operator.lt,
-    "gte": operator.ge,
-    "lte": operator.le,
-}
 
 
 class RoomHealthTarget:
@@ -171,39 +147,11 @@ class RoomHealthTarget:
         """Drop the cached per-scenario report (e.g. after a git reset)."""
         self._last_report = None
 
-    # --- rule engine ---
+    # --- rule engine (delegates to the shared playbook module) ---
 
     def _load_rules(self) -> tuple[list[dict[str, Any]], bool, str]:
-        """Load and validate the playbook.
-
-        Returns (usable_rules, lint_clean, error). Malformed rules are skipped
-        (so a partially-broken file still evaluates), but any structural problem
-        or unknown action flips lint_clean False.
-        """
-        try:
-            raw = yaml.safe_load(self._rules_path.read_text())
-        except (OSError, yaml.YAMLError) as exc:
-            return [], False, f"playbook did not parse: {exc}"
-
-        if not isinstance(raw, dict) or not isinstance(raw.get("rules"), list):
-            return [], False, "playbook must be a mapping with a 'rules' list"
-
-        rules: list[dict[str, Any]] = []
-        lint_clean = True
-        seen_ids: set[str] = set()
-        for rule in raw["rules"]:
-            if (
-                not isinstance(rule, dict)
-                or not isinstance(rule.get("when"), dict)
-                or rule.get("action") not in _KNOWN_ACTIONS
-            ):
-                lint_clean = False
-                continue
-            if rule.get("id") in seen_ids:
-                lint_clean = False
-            seen_ids.add(rule.get("id"))
-            rules.append(rule)
-        return rules, lint_clean, ""
+        """Load + validate the playbook via the shared engine."""
+        return load_playbook(self._rules_path)
 
     def _load_scenarios(self) -> list[dict[str, Any]]:
         data = json.loads(self._scenarios_path.read_text())
@@ -211,33 +159,7 @@ class RoomHealthTarget:
 
     def _decide_action(self, rules: list[dict[str, Any]], signals: dict[str, Any]) -> str:
         """First rule whose conditions all match wins; else 'none'."""
-        for rule in rules:
-            if self._rule_matches(rule["when"], signals):
-                return str(rule["action"])
-        return "none"
-
-    def _rule_matches(self, when: dict[str, Any], signals: dict[str, Any]) -> bool:
-        return all(
-            key in signals and self._condition_holds(cond, signals[key])
-            for key, cond in when.items()
-        )
-
-    @staticmethod
-    def _condition_holds(cond: object, value: object) -> bool:
-        """Evaluate one condition against a signal value (no eval, safe)."""
-        if isinstance(cond, dict):
-            for op, operand in cond.items():
-                fn = _COMPARATORS.get(op)
-                if fn is None:
-                    return False
-                try:
-                    if not fn(value, operand):
-                        return False
-                except TypeError:
-                    return False
-            return True
-        # Scalar condition → exact equality (bool compared strictly vs int).
-        return type(value) is type(cond) and value == cond
+        return decide_action(rules, signals)
 
     # --- memory (fail-open, mirrors CodeImproverTarget) ---
 
