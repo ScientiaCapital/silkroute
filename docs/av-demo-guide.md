@@ -13,7 +13,8 @@ python demo/agent_ready_av_demo.py --mock-mcp
 ```
 
 `--mock-mcp` points the MCP bridge at the vendored `demo/mock_epiphan_mcp.py` — a tiny MCP server
-that serves the 7 Pearl tools from canned Pearl-2-Room320B data. Nothing but silkroute + Ollama is
+that serves the 7 read tools (plus 6 remediation action tools used by the self-healing loop) from a
+mutable Pearl-2-Room320B model. Nothing but silkroute + Ollama is
 required: no `epiphan-mcp-server` clone, no Pearl hardware, no HTTP layer. This is the recommended
 first-touch demo and mirrors what the dashboard's **AV/Edge Demo** page (`/demo`) visualizes.
 

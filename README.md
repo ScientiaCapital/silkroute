@@ -10,9 +10,12 @@ frontier models via OpenRouter) plugs in with a one-line registry entry.
 
 **70% of tasks hit free-tier models. The rest cost 1/20th of GPT-4.**
 
-It's also the **AI-first orchestration backbone for an agentic AV control plane** — driving
-[Dartmouth OpenAV](https://github.com/open-avc/openavc) + Epiphan Pearl/EC20 over MCP so rooms can be
-run in plain English and heal themselves. See [Agentic AV control plane](#agentic-av-control-plane).
+It's also being built as the **AI-first orchestration backbone for an agentic AV control plane** — the
+goal is to drive [Dartmouth OpenAV](https://github.com/Dartmouth-OpenAV) + Epiphan Pearl/EC20 over MCP
+so rooms can be run in plain English and heal themselves. **Shipped today:** a self-contained demo that
+drives a *mock* Pearl over MCP, including a self-healing detect→fix→verify loop. **In progress:** the
+live-room path (device bridge in the sibling `epiphan-openav-bridge` repo). See
+[Agentic AV control plane](#agentic-av-control-plane).
 
 ---
 
@@ -38,7 +41,8 @@ SilkRoute doesn't just support Chinese models — it's *optimized* for them. Sys
 - **Hybrid Local + API + Fit-to-Hardware** — Ollama support for Mac Studio (192GB), NVIDIA Spark, and edge boxes. `hardware_profile` + each model's `min_ram_gb` pick the biggest local model that fits; a `raspberry-pi` edge profile runs the orchestrator on-prem and delegates inference. Zero-cost local inference for 80%+ of tasks.
 - **MCP client *and* server** — `src/silkroute/mcp_bridge` connects the agent to **N** MCP servers over stdio (register their tools alongside the built-ins), and `silkroute mcp serve` exposes SilkRoute's own tools *as* an MCP server (read-only export by default). Demonstrated end-to-end against [epiphan-mcp-server](https://github.com/ScientiaCapital/epiphan-mcp-server) and the OpenAV bridge — see below.
 - **Production-safe by default** — auth is required in production (`SILKROUTE_ENVIRONMENT=production` refuses to start without `SILKROUTE_API_KEY`); `SILKROUTE_API_DEMO_MODE=true` disables money-spending endpoints for public try-it deployments.
-- **24/7 Daemon Mode** — GitHub webhook listener, cron scheduler, heartbeat monitoring. Manages 70+ repos autonomously while you sleep.
+- **24/7 Daemon Mode** — GitHub webhook listener, cron scheduler, and heartbeat monitoring (all in `src/silkroute/daemon/`). Designed to manage many repos autonomously; scale it to your fleet.
+- **Self-healing loop (shipped, against the mock)** — inject a room fault and SilkRoute detects it, picks a remediation from an evolvable playbook, calls the device action over MCP, and re-reads to verify — `python demo/self_healing_demo.py`, plus a live `/demo/heal` panel in the dashboard. Against real rooms, this is the roadmap (see below).
 
 ## Quick Start
 
@@ -108,15 +112,18 @@ Full walkthrough (which Ollama models, telemetry to the model-finops cost dashbo
 
 ## Agentic AV control plane
 
-SilkRoute is the AI-first orchestration layer above [OpenAV](https://github.com/open-avc/openavc)
-(Dartmouth's open AV control system, deployed on 150+ rooms). The
-[`epiphan-openav-bridge`](https://github.com/ScientiaCapital/epiphan-openav-bridge) repo ships
-`openav-mcp` — an MCP server fronting the OpenAV orchestrator + Epiphan Pearl/EC20 — which SilkRoute
-registers as an upstream MCP server and drives in plain English ("get room 320-B recording with the
-camera tracking the presenter"). **OpenAV = the brains; Epiphan = the reliable hardware; SilkRoute =
-the agent backbone above them** (they stay separate — "Epiphan hardware running OpenAV," never
-"Epiphan OpenAV"). Model-agnostic, on-prem, self-healing. See that repo's `HANDOFF.md` to run the
-whole stack end-to-end.
+SilkRoute is being built as the AI-first orchestration layer above
+[OpenAV](https://github.com/Dartmouth-OpenAV) (Dartmouth's open AV control system, running 165+
+production rooms). The [`epiphan-openav-bridge`](https://github.com/ScientiaCapital/epiphan-openav-bridge)
+repo ships `openav-mcp` — an MCP server fronting the OpenAV orchestrator + Epiphan Pearl/EC20 — which
+SilkRoute registers as an upstream MCP server and drives in plain English ("get room 320-B recording
+with the camera tracking the presenter"). **OpenAV = the brains; Epiphan = the reliable hardware;
+SilkRoute = the agent backbone above them** (they stay separate — "Epiphan hardware running OpenAV,"
+never "Epiphan OpenAV"). Model-agnostic, on-prem, self-healing.
+
+**Status:** the round-trip (SilkRoute → `openav-mcp`) is verified with no hardware; live control of real
+rooms is the next milestone (EC20 device endpoints are still placeholders). See that repo's `HANDOFF.md`
+to run the stack end-to-end.
 
 ## Hardware Deployment Tiers
 

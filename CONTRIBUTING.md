@@ -1,7 +1,8 @@
 # Contributing to SilkRoute
 
-Thanks for your interest in SilkRoute — an AI agent orchestrator for Chinese LLMs
-(DeepSeek, Qwen, GLM, Kimi) with cost-aware 3-tier routing and an MCP bridge.
+Thanks for your interest in SilkRoute — a model-agnostic AI agent orchestrator,
+optimized for Chinese LLMs (DeepSeek, Qwen, GLM, Kimi), with cost-aware 3-tier
+routing and an MCP bridge.
 
 PRs are welcome, especially for:
 - New MCP tool servers
@@ -11,8 +12,11 @@ PRs are welcome, especially for:
 
 ## Ground rules
 
-- **Chinese LLMs only.** No OpenAI / Anthropic model providers. Use direct vendor
-  APIs when keys are configured, OpenRouter as the fallback gateway.
+- **Chinese/local-first by default.** The registry ships Chinese + local (Ollama) models and the
+  routing is tuned for them (sovereign, low-cost, $0 local). The architecture is model-agnostic:
+  western frontier models (Claude/GPT/Gemini) ship **opt-in** via a one-line `ModelSpec` through
+  OpenRouter — don't add a "reject non-Chinese" guard. Use direct vendor APIs when keys are
+  configured, OpenRouter as the fallback gateway.
 - **Tests first.** New features and bug fixes ship with tests. The suite is large
   and green — keep it that way.
 - **Small, focused PRs.** One concern per PR; describe the "why", not just the "what".
