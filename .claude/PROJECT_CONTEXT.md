@@ -41,24 +41,31 @@ as front-ends; SilkRoute sits **above** OpenAV.
        dashboard read as an internal ops console, not the "exciting" front door. `/` now renders the
        AV/Edge Demo; Overview/Projects/Models/Budget/Task History/Autonomy moved to `/ops/*`; old
        paths redirect. Pure navigation move, no content redesign.
-6. [x] **Vercel project-link cleanup** — found and removed an erroneous root-level `.vercel/`
-       project link (duplicate of `dashboard/.vercel/`, same project — Vercel tooling was treating
-       the whole Python+dashboard monorepo root as a deployable Next.js project, causing repeated
-       errors on save). Local-only, gitignored, not part of any commit.
+6. [x] **Fixed the real Vercel production deployment failure** — the `silkroute` Vercel project's
+       **Root Directory setting was `.` (repo root) instead of `dashboard/`**, so every single
+       production deployment for 147 days (since the project was created) built from the Python
+       package root, found no Next.js app, and errored in ~2s. Removing the local root `.vercel/`
+       duplicate link (an earlier, real but insufficient fix) only addressed local CLI/editor
+       confusion — it did not touch this cloud-side setting. Fixed via `npm i -g vercel@latest`
+       (50.4.11 → 56.3.1, to get the `vercel api` command) then
+       `vercel api /v9/projects/prj_wwNbeQiXuLves4Zdv4MNcUtEAtxQ -X PATCH -F rootDirectory=dashboard`.
+       Verified: redeployed the latest existing commit, got a real ~41s build instead of an instant
+       error, `● Ready`, live site at `https://silkroute-sepia.vercel.app` returns 200 with the
+       correct page title. Future git pushes to `main` should now deploy successfully too.
+7. [x] **OpenRouter API key configured** — `SILKROUTE_OPENROUTER_API_KEY` set in local `.env`
+       (gitignored; not pushed). Verified: key loads via `_resolve_api_key()`, OpenRouter
+       `/api/v1/models` returns 200 (344 models). Unblocks cloud-model autoresearch keep.
 
 ## Next
-1. [ ] **Cloud model for a clean autoresearch keep** — set `SILKROUTE_OPENROUTER_API_KEY`, run
+1. [ ] **Cloud model for a clean autoresearch keep** — run
        `silkroute research start -t room-health -m deepseek/deepseek-v3.2`, then re-run
        `python demo/self_healing_demo.py`. Local 14B mangles YAML — too weak for a clean keep.
 2. [ ] **EC20 hardware verification** (bench) — EC20 endpoints are still placeholders.
 3. [ ] Consider whether the live-demo's residual "Task exception was never retrieved" log noise
        (upstream `mcp`/anyio interaction, see Done #4) is worth reporting upstream to the `mcp`
        Python SDK, or revisiting with a cooperative-cancellation approach in `run_agent` itself.
-4. [ ] Recommended, not done: `npm i -g vercel@latest` (50.4.11 → 56.3.1) — global system change,
-       left for the user to run directly.
 
 ## Blockers
-- No cloud provider key in `.env` → autoresearch clean-keep still blocked (local 14B flakes).
 - Live AV run needs Pearl/EC20 + OpenAV orchestrator on the bench (EC20 endpoints are placeholders).
 
 ## Working from the AV side?
