@@ -100,7 +100,8 @@ _ACTION_EFFECTS: dict[str, dict[str, Any]] = {
     "start_recorder": {"recorder_state": "recording", "duration_seconds": 0},
     "restart_input": {"input_has_signal": True},
     "rotate_recordings": {"storage_percent_used": 22},
-    "remount_storage": {"storage_mounted": True},
+    # Remounting storage lets the recorder resume (the unmount had stopped it).
+    "remount_storage": {"storage_mounted": True, "recorder_state": "recording"},
     # A reboot brings the device back online and recording (clears device_offline).
     "reboot_device": {"device_state": "online", "recorder_state": "recording"},
     "throttle_channels": {"cpu_percent": 22.5},
