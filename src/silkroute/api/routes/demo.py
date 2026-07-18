@@ -8,24 +8,32 @@ NO money — everything is served from the vendored mock epiphan MCP server
     GET /demo/room     → current mock room/device state (JSON snapshot)
     GET /demo/stream   → Server-Sent Events: a Think → Act → Observe agent trace
 
-The stream is a *deterministic replay* driven by the real mock tool outputs
-(`call_tool_text`), not a live LLM run — matching the self-contained-mock
+By default the stream is a *deterministic replay* driven by the real mock tool
+outputs (`call_tool_text`), not a live LLM run — matching the self-contained-mock
 philosophy of the demo (the dashboard falls back to the same narrative when the
-API is unreachable). A live mode that swaps in `run_agent` is a future toggle;
-the replay is what makes the page work with zero external deps (no Ollama, no
-API key, no DB) on a fresh clone or a static Vercel deployment.
+API is unreachable) and keeping the page working with zero external deps (no
+Ollama, no API key, no DB) on a fresh clone or a static Vercel deployment.
+
+Passing `?live=true` swaps in a real `run_agent()` loop against the vendored
+mock MCP server, using a local (free) Ollama model — see `_stream_live_trace`.
 """
 
 from __future__ import annotations
 
 import asyncio
 import json
+import os
+import sys
 from collections.abc import AsyncIterator
+from pathlib import Path
 from typing import Any
 
+import structlog
 from fastapi import APIRouter, Query
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
+
+log = structlog.get_logger()
 
 router = APIRouter(prefix="/demo", tags=["demo"])
 
@@ -231,18 +239,201 @@ async def _stream_trace(task: str, model: str, delay: float) -> AsyncIterator[st
         yield f"data: [ERROR] {exc}\n\n"
 
 
+_mock_mcp_env_ready = False
+
+
+def _ensure_mock_mcp_env() -> None:
+    """Point run_agent's MCP bridge at the vendored mock Epiphan server, once.
+
+    Uses setdefault, not assignment: a real deployment's own SILKROUTE_MCP_EPIPHAN_*
+    config (an actual Epiphan bridge) always wins over this demo default.
+    """
+    global _mock_mcp_env_ready
+    if _mock_mcp_env_ready:
+        return
+    mock_path = Path(__file__).parent.parent.parent.parent.parent / "demo" / "mock_epiphan_mcp.py"
+    os.environ.setdefault("SILKROUTE_MCP_EPIPHAN_ENABLED", "true")
+    os.environ.setdefault("SILKROUTE_MCP_EPIPHAN_COMMAND", sys.executable)
+    os.environ.setdefault("SILKROUTE_MCP_EPIPHAN_ARGS", json.dumps([str(mock_path)]))
+    _mock_mcp_env_ready = True
+
+
+# Caps concurrent live-mode streams — each one spawns a real subprocess (mock
+# MCP server) + a real local model call, unlike the zero-cost scripted replay.
+# This is a public, unauthenticated endpoint; the semaphore is the load-bearing
+# guard against a handful of concurrent requests exhausting the local Ollama
+# server / subprocess budget.
+_LIVE_DEMO_SEMAPHORE = asyncio.Semaphore(2)
+
+
+async def _stream_live_trace(task: str, model: str) -> AsyncIterator[str]:
+    """Stream a REAL run_agent() loop against the mock room via SSE.
+
+    Translates run_agent's stream_queue vocabulary (iteration/completed/error/
+    budget_exceeded) into the dashboard's TraceEvent shapes (session_start/
+    thought/tool_call/answer/session_complete). max_iterations/budget_limit_usd
+    are deliberately tight — not cost guardrails (Ollama is $0) but wall-clock/
+    loop-count bounds, since this is a public endpoint now spawning a real
+    subprocess + model call per request instead of an in-process dict read.
+    """
+    from silkroute.agent.loop import run_agent
+
+    try:
+        await asyncio.wait_for(_LIVE_DEMO_SEMAPHORE.acquire(), timeout=1)
+    except TimeoutError:
+        yield "data: [ERROR] server busy, try again\n\n"
+        return
+
+    try:
+        _ensure_mock_mcp_env()
+
+        queue: asyncio.Queue[str | None] = asyncio.Queue(maxsize=100)
+        agent_task = asyncio.create_task(
+            run_agent(
+                task,
+                model_override=model,
+                max_iterations=4,
+                budget_limit_usd=0.10,
+                project_id="default",  # always-seeded project; avoids an agent_sessions FK warning
+                stream_queue=queue,
+            )
+        )
+
+        start = TraceEvent(type="session_start", data={"task": task, "model": model, "live": True})
+        yield f"data: {start.model_dump_json()}\n\n"
+
+        reached_conclusion = False
+        last_iteration = 0
+
+        try:
+            async with asyncio.timeout(120):
+                while True:
+                    chunk = await queue.get()
+                    if chunk is None:
+                        break
+                    raw = json.loads(chunk)
+                    event_type = raw.get("type")
+                    last_iteration = raw.get("iteration", last_iteration)
+
+                    if event_type == "iteration":
+                        thought = TraceEvent(type="thought", data={"text": raw.get("thought", "")})
+                        yield f"data: {thought.model_dump_json()}\n\n"
+                        if raw.get("tools_called", 0) > 0:
+                            tool_call = TraceEvent(
+                                type="tool_call",
+                                data={
+                                    "count": raw["tools_called"],
+                                    "cost_usd": raw.get("cost_usd", 0.0),
+                                },
+                            )
+                            yield f"data: {tool_call.model_dump_json()}\n\n"
+                    elif event_type == "completed":
+                        reached_conclusion = True
+                        answer = TraceEvent(
+                            type="answer",
+                            data={
+                                "text": raw.get("output", ""),
+                                "cost_usd": raw.get("cost_usd", 0.0),
+                            },
+                        )
+                        yield f"data: {answer.model_dump_json()}\n\n"
+                        complete = TraceEvent(
+                            type="session_complete",
+                            data={
+                                "cost_usd": raw.get("cost_usd", 0.0),
+                                "iterations": raw.get("iteration", 0),
+                                "cloud_calls": 0,
+                                "live": True,
+                            },
+                        )
+                        yield f"data: {complete.model_dump_json()}\n\n"
+                    elif event_type in ("error", "budget_exceeded"):
+                        detail = raw.get("error") or raw.get("warning") or event_type
+                        yield f"data: [ERROR] {detail}\n\n"
+                        return
+
+                if not reached_conclusion:
+                    # run_agent hit max_iterations without ever emitting a "completed"
+                    # event (the model kept calling tools without concluding) — say so
+                    # honestly instead of letting the trace silently cut off with no
+                    # answer bubble, which reads as broken rather than "inconclusive."
+                    answer = TraceEvent(
+                        type="answer",
+                        data={
+                            "text": (
+                                "I wasn't able to reach a conclusive answer within the step "
+                                "limit — the local model kept re-checking status instead of "
+                                "concluding. Try again, or ask a narrower question."
+                            ),
+                            "cost_usd": 0.0,
+                        },
+                    )
+                    yield f"data: {answer.model_dump_json()}\n\n"
+                    complete = TraceEvent(
+                        type="session_complete",
+                        data={
+                            "cost_usd": 0.0,
+                            "iterations": last_iteration,
+                            "cloud_calls": 0,
+                            "live": True,
+                            "inconclusive": True,
+                        },
+                    )
+                    yield f"data: {complete.model_dump_json()}\n\n"
+            yield "data: [DONE]\n\n"
+        except TimeoutError:
+            yield "data: [ERROR] timed out\n\n"
+        except Exception as exc:  # noqa: BLE001 — never break the SSE contract
+            yield f"data: [ERROR] {exc}\n\n"
+        finally:
+            if not agent_task.done():
+                agent_task.cancel()
+                # Cancelling run_agent mid-flight (e.g. on our own timeout above) can
+                # unwind through the MCP stdio client's anyio task group and surface
+                # as a RuntimeError ("cancel scope in a different task"), not a plain
+                # CancelledError — this cleanup is best-effort at this point (the
+                # client already has our [ERROR]/[DONE] frame), so swallow broadly,
+                # but log it in case a real leak ever shows up here.
+                #
+                # Known limitation, observed on real hardware: this doesn't catch
+                # every manifestation. The `mcp` package's stdio_client() spawns its
+                # own anyio TaskGroup sub-tasks for the subprocess's read/write loops;
+                # when cancellation lands mid-flight, one of *those* sub-tasks can end
+                # up with an unretrieved exception independent of `agent_task` itself,
+                # which asyncio logs directly ("Task exception was never retrieved")
+                # rather than raising it here. That's an upstream mcp/anyio
+                # cross-task-cancellation interaction, not something app code can
+                # intercept without changing how run_agent connects to MCP servers —
+                # accepted as harmless log noise on an already-degraded (timed-out)
+                # request rather than chasing a fix in third-party library internals.
+                try:
+                    await agent_task
+                except asyncio.CancelledError:
+                    pass
+                except Exception as cleanup_exc:  # noqa: BLE001 — see comment above
+                    log.debug("live_demo_agent_cleanup_error", error=str(cleanup_exc))
+    finally:
+        _LIVE_DEMO_SEMAPHORE.release()
+
+
 @router.get("/stream")
 async def demo_stream(
     task: str = Query(default=DEFAULT_TASK, min_length=1),
     model: str = Query(default=DEFAULT_MODEL),
     delay: float = Query(default=0.35, ge=0.0, le=5.0),
+    live: bool = Query(
+        default=False,
+        description="Run a real local-Ollama agent loop instead of the scripted replay",
+    ),
 ) -> StreamingResponse:
     """Stream a Think → Act → Observe agent trace over the mock room via SSE.
 
         curl -N 'localhost:8787/demo/stream'
+        curl -N 'localhost:8787/demo/stream?live=true'   # real run_agent() over local Ollama
     """
+    generator = _stream_live_trace(task, model) if live else _stream_trace(task, model, delay)
     return StreamingResponse(
-        _stream_trace(task, model, delay),
+        generator,
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
