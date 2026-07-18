@@ -26,6 +26,7 @@ from silkroute.config.settings import SilkRouteSettings
 from silkroute.mantis.runtime.interface import RuntimeConfig
 from silkroute.mantis.supervisor.models import (
     SupervisorPlan,
+    SupervisorSession,
     SupervisorStep,
 )
 from silkroute.mantis.supervisor.runtime import SupervisorRuntime
@@ -35,6 +36,40 @@ router = APIRouter(
     tags=["supervisor"],
     dependencies=[Depends(require_auth)],
 )
+
+
+def _steps_to_response(steps: list[SupervisorStep]) -> list[SupervisorStepResponse]:
+    return [
+        SupervisorStepResponse(
+            id=s.id,
+            name=s.name,
+            status=s.status.value,
+            cost_usd=s.cost_usd,
+            output=s.output,
+            error=s.error,
+            retry_count=s.retry_count,
+        )
+        for s in steps
+    ]
+
+
+def _session_to_response(
+    session: SupervisorSession,
+    *,
+    total_cost_usd: float | None = None,
+) -> SupervisorSessionResponse:
+    return SupervisorSessionResponse(
+        id=session.id,
+        project_id=session.project_id,
+        status=session.status.value,
+        total_cost_usd=(
+            total_cost_usd if total_cost_usd is not None else session.total_cost_usd
+        ),
+        steps=_steps_to_response(session.plan.steps),
+        created_at=session.created_at.isoformat(),
+        updated_at=session.updated_at.isoformat(),
+        error=session.error,
+    )
 
 
 @router.get("/sessions")
@@ -53,30 +88,7 @@ async def list_sessions(
     sessions = await list_supervisor_sessions(
         db_pool, project_id=project_id, status=status, limit=limit,
     )
-    return [
-        SupervisorSessionResponse(
-            id=s.id,
-            project_id=s.project_id,
-            status=s.status.value,
-            total_cost_usd=s.total_cost_usd,
-            steps=[
-                SupervisorStepResponse(
-                    id=st.id,
-                    name=st.name,
-                    status=st.status.value,
-                    cost_usd=st.cost_usd,
-                    output=st.output,
-                    error=st.error,
-                    retry_count=st.retry_count,
-                )
-                for st in s.plan.steps
-            ],
-            created_at=s.created_at.isoformat(),
-            updated_at=s.updated_at.isoformat(),
-            error=s.error,
-        )
-        for s in sessions
-    ]
+    return [_session_to_response(s) for s in sessions]
 
 
 @router.post("/sessions")
@@ -117,27 +129,7 @@ async def create_session(
         budget_limit_usd=body.total_budget_usd,
     ))
 
-    return SupervisorSessionResponse(
-        id=session.id,
-        project_id=session.project_id,
-        status=session.status.value,
-        total_cost_usd=result.cost_usd,
-        steps=[
-            SupervisorStepResponse(
-                id=s.id,
-                name=s.name,
-                status=s.status.value,
-                cost_usd=s.cost_usd,
-                output=s.output,
-                error=s.error,
-                retry_count=s.retry_count,
-            )
-            for s in session.plan.steps
-        ],
-        created_at=session.created_at.isoformat(),
-        updated_at=session.updated_at.isoformat(),
-        error=session.error,
-    )
+    return _session_to_response(session, total_cost_usd=result.cost_usd)
 
 
 @router.get("/sessions/{session_id}")
@@ -155,27 +147,7 @@ async def get_session(
     if session is None:
         raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
 
-    return SupervisorSessionResponse(
-        id=session.id,
-        project_id=session.project_id,
-        status=session.status.value,
-        total_cost_usd=session.total_cost_usd,
-        steps=[
-            SupervisorStepResponse(
-                id=s.id,
-                name=s.name,
-                status=s.status.value,
-                cost_usd=s.cost_usd,
-                output=s.output,
-                error=s.error,
-                retry_count=s.retry_count,
-            )
-            for s in session.plan.steps
-        ],
-        created_at=session.created_at.isoformat(),
-        updated_at=session.updated_at.isoformat(),
-        error=session.error,
-    )
+    return _session_to_response(session)
 
 
 @router.post("/sessions/{session_id}/resume")
