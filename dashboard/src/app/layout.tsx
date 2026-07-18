@@ -25,12 +25,16 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <h1 className="text-lg font-bold text-amber-500">SilkRoute</h1>
             <p className="text-xs text-neutral-500">Chinese LLM Orchestrator</p>
           </div>
-          <NavLink href="/" label="Overview" icon="📊" />
-          <NavLink href="/projects" label="Projects" icon="📁" />
-          <NavLink href="/models" label="Models" icon="🤖" />
-          <NavLink href="/budget" label="Budget" icon="💰" />
-          <NavLink href="/tasks" label="Task History" icon="📋" />
-          <NavLink href="/demo" label="AV/Edge Demo" icon="🎥" />
+          <NavLink href="/" label="Agent-Ready AV" icon="🎥" />
+          <div className="px-4 pt-4 pb-1 text-[10px] uppercase tracking-wider text-neutral-600">
+            Operations
+          </div>
+          <NavLink href="/ops/overview" label="Overview" icon="📊" />
+          <NavLink href="/ops/projects" label="Projects" icon="📁" />
+          <NavLink href="/ops/models" label="Models" icon="🤖" />
+          <NavLink href="/ops/budget" label="Budget" icon="💰" />
+          <NavLink href="/ops/tasks" label="Task History" icon="📋" />
+          <NavLink href="/ops/autonomy" label="Autonomy" icon="🧠" />
           <div className="mt-auto px-4 py-3 text-xs text-neutral-600">
             v0.1.0
           </div>
