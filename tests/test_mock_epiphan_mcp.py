@@ -20,7 +20,9 @@ if _DEMO_DIR not in sys.path:
 
 import mock_epiphan_mcp as stub  # noqa: E402
 
-# The 7 tools silkroute's epiphan allowlist expects (settings.MCPConfig default).
+# The 7 read tools silkroute's epiphan allowlist expects (settings.MCPConfig
+# default). The mock also serves 6 remediation ACTION tools for the self-healing
+# loop; those are NOT in the production allowlist (reached via an explicit one).
 EXPECTED_TOOLS = {
     "get_device_status",
     "list_devices",
@@ -31,10 +33,23 @@ EXPECTED_TOOLS = {
     "get_fleet_status",
 }
 
+ACTION_TOOLS = {
+    "start_recorder",
+    "restart_input",
+    "rotate_recordings",
+    "remount_storage",
+    "reboot_device",
+    "throttle_channels",
+}
+
 
 class TestToolCatalog:
-    def test_exposes_the_seven_allowlisted_tools(self) -> None:
-        assert set(stub.list_tool_names()) == EXPECTED_TOOLS
+    def test_exposes_the_allowlisted_read_tools(self) -> None:
+        assert EXPECTED_TOOLS.issubset(stub.list_tool_names())
+
+    def test_exposes_the_remediation_action_tools(self) -> None:
+        assert ACTION_TOOLS.issubset(stub.list_tool_names())
+        assert len(stub.list_tool_names()) == 13  # 7 read + 6 action
 
 
 class TestCannedResponses:

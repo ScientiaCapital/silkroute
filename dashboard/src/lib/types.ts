@@ -139,3 +139,20 @@ export interface TraceEvent {
   type: TraceEventType;
   data: Record<string, unknown>;
 }
+
+// Self-healing loop frames (GET /demo/heal).
+export type HealEventType = "heal_start" | "heal_step" | "heal_result";
+
+export interface HealEvent {
+  type: HealEventType;
+  data: Record<string, unknown>;
+}
+
+export const HEAL_FAULTS = [
+  "recorder_stopped",
+  "signal_loss",
+  "storage_full",
+  "storage_unmounted",
+  "device_offline",
+  "cpu_overload",
+] as const;

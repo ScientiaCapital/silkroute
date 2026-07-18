@@ -8,7 +8,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import { PEARL, CONVERSATION } from "@/lib/demo";
-import type { RoomState, TraceEvent } from "@/lib/types";
+import type { RoomState, TraceEvent, HealEvent } from "@/lib/types";
+import { HEAL_FAULTS } from "@/lib/types";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8787";
 
@@ -218,16 +219,140 @@ export default function LiveRoomView() {
   }, []);
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-      <div className="sr-fade-up bg-neutral-900 border border-neutral-800 rounded-xl p-6" style={{ animationDelay: "480ms" }}>
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold">What the agent did</h2>
-          <LiveBadge live={live} />
+    <>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="sr-fade-up bg-neutral-900 border border-neutral-800 rounded-xl p-6" style={{ animationDelay: "480ms" }}>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-semibold">What the agent did</h2>
+            <LiveBadge live={live} />
+          </div>
+          {trace.length > 0 ? <TraceView trace={trace} /> : <StaticTrace />}
         </div>
-        {trace.length > 0 ? <TraceView trace={trace} /> : <StaticTrace />}
+
+        <DeviceStatus room={room} />
       </div>
 
-      <DeviceStatus room={room} />
+      <SelfHealPanel />
+    </>
+  );
+}
+
+// --- self-healing panel: inject a fault → watch the room heal itself ---
+
+const FAULT_LABELS: Record<string, string> = {
+  recorder_stopped: "Recorder stopped",
+  signal_loss: "Input signal lost",
+  storage_full: "Storage full",
+  storage_unmounted: "Storage unmounted",
+  device_offline: "Device offline",
+  cpu_overload: "CPU overload",
+};
+
+function SelfHealPanel() {
+  const [fault, setFault] = useState<string>("signal_loss");
+  const [steps, setSteps] = useState<string[]>([]);
+  const [outcome, setOutcome] = useState<string | null>(null);
+  const [running, setRunning] = useState(false);
+  const esRef = useRef<EventSource | null>(null);
+
+  const inject = () => {
+    esRef.current?.close();
+    setSteps([]);
+    setOutcome(null);
+    setRunning(true);
+
+    const es = new EventSource(`${API_BASE}/demo/heal?fault=${fault}`);
+    esRef.current = es;
+    es.onmessage = (event) => {
+      if (event.data.startsWith("[")) {
+        es.close();
+        setRunning(false);
+        return;
+      }
+      try {
+        const ev: HealEvent = JSON.parse(event.data);
+        if (ev.type === "heal_step") {
+          setSteps((prev) => [...prev, str(ev.data, "text")]);
+        } else if (ev.type === "heal_result") {
+          setOutcome(str(ev.data, "outcome"));
+        }
+      } catch {
+        /* ignore malformed frame */
+      }
+    };
+    es.onerror = () => {
+      es.close();
+      setRunning(false);
+    };
+  };
+
+  useEffect(() => () => esRef.current?.close(), []);
+
+  const outcomeStyle =
+    outcome === "healed"
+      ? "text-emerald-400 bg-emerald-400/10"
+      : outcome === "unhandled"
+        ? "text-amber-400 bg-amber-400/10"
+        : "text-neutral-400 bg-neutral-800";
+  const outcomeLabel =
+    outcome === "healed"
+      ? "✓ Healed autonomously"
+      : outcome === "unhandled"
+        ? "⚠ Unhandled — evolve the playbook"
+        : outcome === "healthy"
+          ? "Already healthy"
+          : "";
+
+  return (
+    <div className="sr-fade-up bg-neutral-900 border border-neutral-800 rounded-xl p-6 mt-6" style={{ animationDelay: "640ms" }}>
+      <div className="flex items-center justify-between mb-1">
+        <h2 className="text-lg font-semibold">Self-healing loop</h2>
+        <span className="text-[10px] uppercase tracking-wide text-neutral-500">detect → fix → verify</span>
+      </div>
+      <p className="text-xs text-neutral-500 mb-4">
+        Inject a fault into the room. The control plane detects it, picks a remediation from the
+        playbook, calls the device action over MCP, and re-reads to verify.
+      </p>
+
+      <div className="flex flex-wrap items-center gap-3 mb-5">
+        <select
+          value={fault}
+          onChange={(e) => setFault(e.target.value)}
+          disabled={running}
+          className="bg-neutral-800 border border-neutral-700 rounded-lg px-3 py-2 text-sm text-neutral-200 focus:outline-none focus:border-neutral-500 disabled:opacity-50"
+        >
+          {HEAL_FAULTS.map((f) => (
+            <option key={f} value={f}>
+              {FAULT_LABELS[f] ?? f}
+            </option>
+          ))}
+        </select>
+        <button
+          onClick={inject}
+          disabled={running}
+          className="bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-neutral-950 font-medium text-sm px-4 py-2 rounded-lg transition-colors"
+        >
+          {running ? "Healing…" : "Inject fault → Heal"}
+        </button>
+        {outcome && (
+          <span className={"text-xs px-2.5 py-1 rounded-full " + outcomeStyle}>{outcomeLabel}</span>
+        )}
+      </div>
+
+      {steps.length > 0 && (
+        <ol className="flex flex-col gap-2">
+          {steps.map((s, i) => (
+            <li key={i} className="font-mono text-xs text-neutral-400 pl-1 border-l border-neutral-800">
+              {s}
+            </li>
+          ))}
+        </ol>
+      )}
+      {steps.length === 0 && !running && (
+        <p className="text-xs text-neutral-600 italic">
+          Requires the API (<span className="font-mono">/demo/heal</span>) — pick a fault and click to run the loop live.
+        </p>
+      )}
     </div>
   );
 }

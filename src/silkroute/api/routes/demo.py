@@ -246,3 +246,67 @@ async def demo_stream(
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
+
+
+# --- self-healing loop (GET /demo/heal) ---
+
+# Fault types the mock can inject (mirrors demo/mock_epiphan_mcp._FAULTS).
+HEAL_FAULTS = (
+    "recorder_stopped",
+    "signal_loss",
+    "storage_full",
+    "storage_unmounted",
+    "device_offline",
+    "cpu_overload",
+)
+
+
+async def _stream_heal(fault: str, delay: float) -> AsyncIterator[str]:
+    """Run one detect → fix → verify cycle on the mock and stream typed frames."""
+    try:
+        from silkroute.autoresearch.heal import heal_with_mock
+
+        yield f"data: {TraceEvent(type='heal_start', data={'fault': fault}).model_dump_json()}\n\n"
+        if delay > 0:
+            await asyncio.sleep(delay)
+
+        result = await heal_with_mock(fault)
+
+        for step in result.steps:
+            frame = TraceEvent(type="heal_step", data={"text": step})
+            yield f"data: {frame.model_dump_json()}\n\n"
+            if delay > 0:
+                await asyncio.sleep(delay)
+
+        done = TraceEvent(
+            type="heal_result",
+            data={
+                "fault_type": result.fault_type,
+                "action": result.action,
+                "tool_called": result.tool_called,
+                "verified": result.verified,
+                "outcome": result.outcome,  # healed | unhandled | healthy
+            },
+        )
+        yield f"data: {done.model_dump_json()}\n\n"
+        yield "data: [DONE]\n\n"
+    except Exception as exc:  # noqa: BLE001 — never break the SSE contract
+        yield f"data: [ERROR] {exc}\n\n"
+
+
+@router.get("/heal")
+async def demo_heal(
+    fault: str = Query(default="signal_loss"),
+    delay: float = Query(default=0.4, ge=0.0, le=5.0),
+) -> StreamingResponse:
+    """Inject a fault into the mock room and stream the self-healing loop via SSE.
+
+        curl -N 'localhost:8787/demo/heal?fault=signal_loss'
+    """
+    if fault not in HEAL_FAULTS:
+        fault = "signal_loss"
+    return StreamingResponse(
+        _stream_heal(fault, delay),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
