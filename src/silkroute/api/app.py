@@ -123,6 +123,7 @@ def create_app(settings: SilkRouteSettings | None = None) -> FastAPI:
     from silkroute.api.routes.memories import router as memories_router
     from silkroute.api.routes.models_api import router as models_router
     from silkroute.api.routes.projects import router as projects_router
+    from silkroute.api.routes.research import router as research_router
     from silkroute.api.routes.runtime import router as runtime_router
     from silkroute.api.routes.skills import router as skills_router
     from silkroute.api.routes.supervisor import router as supervisor_router
@@ -139,5 +140,6 @@ def create_app(settings: SilkRouteSettings | None = None) -> FastAPI:
     app.include_router(skills_router)
     app.include_router(context7_router)
     app.include_router(memories_router)
+    app.include_router(research_router)
 
     return app

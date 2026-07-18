@@ -1,4 +1,4 @@
-import type { ProjectListResponse, GlobalBudgetResponse, ProjectBudgetResponse, ModelCostSnapshotListResponse, SupervisorSession } from "./types";
+import type { ProjectListResponse, GlobalBudgetResponse, ProjectBudgetResponse, ModelCostSnapshotListResponse, SupervisorSession, ModelCatalogItem, LedgerSummaryResponse, MemoryListResponse } from "./types";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8787";
 // Server-only secret (no NEXT_PUBLIC_ prefix → never shipped to the browser).
@@ -47,4 +47,17 @@ export async function fetchHealth(): Promise<{ status: string }> {
 export async function fetchSupervisorSessions(projectId?: string): Promise<SupervisorSession[]> {
   const params = projectId ? `?project_id=${encodeURIComponent(projectId)}` : "";
   return apiFetch<SupervisorSession[]>(`/supervisor/sessions${params}`);
+}
+
+export async function fetchModels(): Promise<ModelCatalogItem[]> {
+  return apiFetch<ModelCatalogItem[]>("/models");
+}
+
+export async function fetchLedger(): Promise<LedgerSummaryResponse> {
+  return apiFetch<LedgerSummaryResponse>("/research/ledger");
+}
+
+export async function fetchMemories(projectId?: string): Promise<MemoryListResponse> {
+  const params = projectId ? `?project_id=${encodeURIComponent(projectId)}` : "";
+  return apiFetch<MemoryListResponse>(`/memories${params}`);
 }

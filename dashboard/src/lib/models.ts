@@ -247,4 +247,7 @@ export const PROVIDER_LABELS: Record<string, string> = {
   "z-ai": "Zhipu AI",
   moonshotai: "Moonshot",
   ollama: "Ollama (Local)",
+  anthropic: "Anthropic",
+  openai: "OpenAI",
+  google: "Google",
 };

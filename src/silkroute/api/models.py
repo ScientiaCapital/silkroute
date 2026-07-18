@@ -332,3 +332,30 @@ class MemoryListResponse(BaseModel):
     items: list[MemoryItem]
     count: int
     available: bool = True
+
+
+# --- AutoResearch Ledger ---
+
+
+class LedgerEntryResponse(BaseModel):
+    """A single autoresearch experiment result."""
+
+    commit: str
+    score: float
+    pass_rate: float
+    coverage: float
+    status: str
+    description: str
+
+
+class LedgerSummaryResponse(BaseModel):
+    """GET /research/ledger response.
+
+    available=False signals no ledger file exists yet — a fail-open response,
+    not "zero experiments have run".
+    """
+
+    entries: list[LedgerEntryResponse]
+    counts: dict[str, int]
+    best: LedgerEntryResponse | None
+    available: bool = True

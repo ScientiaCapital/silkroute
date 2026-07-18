@@ -1,4 +1,12 @@
-export type Provider = "deepseek" | "qwen" | "z-ai" | "moonshotai" | "ollama";
+export type Provider =
+  | "deepseek"
+  | "qwen"
+  | "z-ai"
+  | "moonshotai"
+  | "ollama"
+  | "anthropic"
+  | "openai"
+  | "google";
 export type ModelTier = "free" | "standard" | "premium";
 export type Capability = "coding" | "reasoning" | "tool_calling" | "long_context" | "multimodal" | "agentic" | "math" | "creative";
 
@@ -18,6 +26,25 @@ export interface ModelSpec {
   totalParamsB: number;
   activeParamsB: number;
   recommendedFor: string[];
+}
+
+// Live GET /models catalog entry — a subset of ModelSpec's fields (the API
+// doesn't serve param counts or recommendedFor), snake_case to mirror the
+// FastAPI ModelResponse verbatim.
+export interface ModelCatalogItem {
+  model_id: string;
+  name: string;
+  provider: string;
+  tier: ModelTier;
+  input_cost_per_m: number;
+  output_cost_per_m: number;
+  context_window: number;
+  max_output_tokens: number;
+  capabilities: string[];
+  supports_tool_calling: boolean;
+  supports_streaming: boolean;
+  is_moe: boolean;
+  is_free: boolean;
 }
 
 export interface BudgetSnapshot {
@@ -146,6 +173,42 @@ export type HealEventType = "heal_start" | "heal_step" | "heal_result";
 export interface HealEvent {
   type: HealEventType;
   data: Record<string, unknown>;
+}
+
+// --- AutoResearch Ledger (GET /research/ledger) ---
+
+export interface LedgerEntry {
+  commit: string;
+  score: number;
+  pass_rate: number;
+  coverage: number;
+  status: string;
+  description: string;
+}
+
+export interface LedgerSummaryResponse {
+  entries: LedgerEntry[];
+  counts: Record<string, number>;
+  best: LedgerEntry | null;
+  available: boolean;
+}
+
+// --- Persistent agent memories (GET /memories) ---
+
+export interface MemoryItem {
+  id: number;
+  project_id: string | null;
+  kind: string;
+  content: string;
+  importance: number;
+  recall_count: number;
+  created_at: string;
+}
+
+export interface MemoryListResponse {
+  items: MemoryItem[];
+  count: number;
+  available: boolean;
 }
 
 export const HEAL_FAULTS = [
