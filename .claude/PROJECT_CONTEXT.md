@@ -4,41 +4,58 @@
 
 ## Status
 Model-agnostic AI agent orchestrator (Chinese-LLM-optimized) — and the **AI-first orchestration
-backbone** for the agentic AV control plane. On `main` (`2243dc1`): production security gate, MCP
-server + N-server bridge, self-contained AV/edge demo, fit-to-hardware routing + `raspberry-pi`,
-western frontier models, live SSE room view, a self-healing room-health `ResearchTarget`, **and now a
-CLOSED self-healing loop** — detect fault → pick fix from the playbook → call an MCP action tool →
-re-read to verify, watchable live on `/demo`. **1115 tests passing**; `ruff check src/` at the
-5-error baseline. Positioning: **embrace** Hermes/OpenClaw as front-ends; SilkRoute sits **above** OpenAV.
+backbone** for the agentic AV control plane. On `main` (`5713db6`): production security gate, MCP
+server + N-server bridge, self-contained AV/edge demo (now with a **genuinely live agent mode**, not
+just scripted replay), fit-to-hardware routing + `raspberry-pi`, western frontier models, a CLOSED
+self-healing loop, and a **restructured dashboard** — the AV/Edge Demo is the landing page (`/`),
+everything else (Overview/Projects/Models/Budget/Task History/Autonomy) lives under `/ops/*`.
+**1124 tests passing**; `ruff check src/` clean (0 errors). Positioning: **embrace** Hermes/OpenClaw
+as front-ends; SilkRoute sits **above** OpenAV.
 
-## Done (This Session — closed the self-healing loop)
-1. [x] **Shared playbook engine** (`320ab70`) — extracted `autoresearch/playbook.py`
-       (`load_playbook`/`decide_action`/`KNOWN_ACTIONS`) so the scoring target AND the runtime
-       executor use ONE engine. Pure refactor; room-health tests unchanged.
-2. [x] **Mutable mock room + 6 action tools** (`1788965`) — `demo/mock_epiphan_mcp.py` is now a
-       mutable Room320B; action tools (start_recorder, restart_input, rotate_recordings,
-       remount_storage, reboot_device, throttle_channels) mutate state so a re-read verifies the fix.
-       Fault injection via `SILKROUTE_MOCK_ROOM_FAULT`. Healthy defaults byte-compatible with before.
-3. [x] **Remediation executor** (`c96d2c9`) — `autoresearch/heal.py` (`heal_room`/`heal_with_mock`)
-       reuses `connect_mcp_server` + `ToolRegistry.execute` + the shared playbook. `demo/
-       self_healing_demo.py` heals 3/6 with the seed playbook (matches the 0.67 score), 6/6 with a
-       complete one. Executor uses its OWN allowlist (read+action); production allowlist stays read-only.
-4. [x] **Watchable in the browser** (`2243dc1`) — un-gated `GET /demo/heal?fault=<type>` SSE + an
-       "Inject fault → Heal" panel in `LiveRoomView`. Verified in a real browser (Playwright): inject
-       signal_loss → streamed detect→fix→verify → "✓ Healed autonomously".
+## Done (This Session — sprint: harden, restructure, ship)
+1. [x] **Tech-debt cleanup** (`560e332`, `9f5ba33`) — 5 ruff errors in `cli.py`, dead
+       `ANN101/ANN102` ruff-ignore, deduped 3x-repeated `SupervisorSessionResponse` construction
+       into `_session_to_response`/`_steps_to_response` helpers.
+2. [x] **Dashboard tooling** (`061156a`) — real ESLint config (`next lint` had none, prompted
+       interactively). `next`/`eslint-config-next` `^15.1.0`→`^15.5.20` (still the 15.x line — every
+       flagged CVE's fix ceiling was ≤15.5.18, no Next 16 migration) + a scoped `postcss` override.
+       `npm audit`: 2 vulnerabilities → 0.
+3. [x] **Live Models page + Autonomy/Ledger page** (`afc8721`) — Models page now fetches
+       `GET /models` live (21 entries incl. Claude Sonnet 5/GPT-5.6/Gemini 3.5), static list kept as
+       offline fallback. New `GET /research/ledger` route (none existed) + `/ops/autonomy` page
+       surfacing the experiment ledger + `agent_memories` — previously invisible except via raw
+       TSV/DB access.
+4. [x] **Live `run_agent` mode for `/demo/stream`** (`423a38b`) — `?live=true` spawns a real
+       `run_agent()` loop over local Ollama against the mock MCP server (translates its coarser
+       `stream_queue` vocabulary into the dashboard's `TraceEvent` shapes). Default replay unchanged.
+       Real-hardware testing surfaced and fixed: a `project_id` FK-violation warning, an anyio
+       cross-task-cancellation `RuntimeError` on timeout-cancel (broadened but not 100% eliminated —
+       an orphaned `mcp`-internal sub-task can still log noise; documented as an accepted upstream
+       limitation, not app-fixable without changing how `run_agent` connects to MCP servers), a
+       silent-cutoff when the model loops without concluding (now an honest "reached the step limit"
+       answer), a concurrency semaphore (2 concurrent streams, immediate "server busy" past that)
+       since the endpoint is public/unauthenticated and now does real work, and a visible error
+       banner in the dashboard when a live run ends in error/timeout (previously: silently went idle).
+5. [x] **Dashboard IA restructuring** (`5713db6`) — validated against Epiphan's own public
+       `agent-ready-av` page (no pricing disclosed anywhere, no vendor-lock-in framing): most of the
+       dashboard read as an internal ops console, not the "exciting" front door. `/` now renders the
+       AV/Edge Demo; Overview/Projects/Models/Budget/Task History/Autonomy moved to `/ops/*`; old
+       paths redirect. Pure navigation move, no content redesign.
+6. [x] **Vercel project-link cleanup** — found and removed an erroneous root-level `.vercel/`
+       project link (duplicate of `dashboard/.vercel/`, same project — Vercel tooling was treating
+       the whole Python+dashboard monorepo root as a deployable Next.js project, causing repeated
+       errors on save). Local-only, gitignored, not part of any commit.
 
 ## Next
 1. [ ] **Cloud model for a clean autoresearch keep** — set `SILKROUTE_OPENROUTER_API_KEY`, run
        `silkroute research start -t room-health -m deepseek/deepseek-v3.2`, then re-run
-       `python demo/self_healing_demo.py` (the evolved playbook should heal more rooms). Local 14B
-       mangles YAML — too weak for a clean keep.
-2. [ ] **Surface autonomy in the dashboard** — no UI shows the experiment `Ledger`
-       (`.silkroute/autoresearch/results.tsv`; `Ledger.read/recent/best/count`) or `agent_memories`
-       (endpoint `/memories` exists, no page). A "Research/Autonomy" page is greenfield + high-signal.
-3. [ ] **Wire western models into the dashboard Models page** — it's static (`dashboard/src/lib/
-       models.ts`, 13 Chinese models, hardcoded "Chinese LLMs" copy); the API already serves all 21
-       via `GET /models`. Either add 4 entries or switch the page to fetch live.
-4. [ ] **Live `run_agent` mode for `/demo/stream`**; EC20 hardware verification (bench).
+       `python demo/self_healing_demo.py`. Local 14B mangles YAML — too weak for a clean keep.
+2. [ ] **EC20 hardware verification** (bench) — EC20 endpoints are still placeholders.
+3. [ ] Consider whether the live-demo's residual "Task exception was never retrieved" log noise
+       (upstream `mcp`/anyio interaction, see Done #4) is worth reporting upstream to the `mcp`
+       Python SDK, or revisiting with a cooperative-cancellation approach in `run_agent` itself.
+4. [ ] Recommended, not done: `npm i -g vercel@latest` (50.4.11 → 56.3.1) — global system change,
+       left for the user to run directly.
 
 ## Blockers
 - No cloud provider key in `.env` → autoresearch clean-keep still blocked (local 14B flakes).
@@ -46,8 +63,7 @@ re-read to verify, watchable live on `/demo`. **1115 tests passing**; `ruff chec
 
 ## Working from the AV side?
 The AV control plane lives in the sibling repo **`epiphan-openav-bridge`** — start at its
-**`HANDOFF.md`** (verified no-hardware smoke test + go-live steps). Canonical business strategy:
-`../epiphan-pi-strategic-report.md`. Full plan: `~/.claude/plans/where-we-at-with-fluffy-popcorn.md`.
+**`HANDOFF.md`** (verified no-hardware plug-and-play).
 
 ## Tech Stack
 Python 3.12 (Click · Pydantic · FastAPI · litellm · asyncpg · redis · mcp · httpx) | Next.js 15

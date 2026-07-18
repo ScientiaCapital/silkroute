@@ -5,7 +5,10 @@ Hybrid Python core + Next.js dashboard architecture.
 
 **Shipped today:** the 21-model registry + cost-aware routing, an MCP client/server bridge, budget
 governance, and a self-contained AV/edge demo that drives a *mock* Epiphan Pearl over MCP — including
-a self-healing detect→fix→verify loop against that mock.
+a self-healing detect→fix→verify loop against that mock. The demo's agent trace defaults to a
+scripted replay (zero external deps) but also supports a genuinely live mode
+(`GET /demo/stream?live=true`, "Run live agent" button on the dashboard's landing page) that runs a
+real `run_agent()` loop over a local Ollama model against the mock room.
 
 **Where this is going (the north star):** the AI-first orchestration backbone for an agentic AV
 control plane — driving the real [Dartmouth OpenAV](https://github.com/Dartmouth-OpenAV) + Epiphan
@@ -28,7 +31,8 @@ silkroute/
 │   ├── daemon/ db/ mantis/ # Daemon (webhook/cron/heartbeat), DB repos, agent runtime/skills
 │   └── ...                 # network/ (SSRF), integrations/, config/
 ├── dashboard/              # Next.js 15 App Router + Tailwind
-│   └── src/app/            # 6 pages: Overview, Projects, Models, Budget, Task History, AV/Edge Demo
+│   └── src/app/            # landing page (AV/Edge Demo) + /ops/* (Overview, Projects, Models,
+│                           #   Budget, Task History, Autonomy)
 ├── demo/                   # AV demo agents; mock Pearl + vendored mock epiphan MCP (--mock-mcp);
 │                           #   self_healing_demo.py (detect→fix→verify against the mock room)
 ├── docs/                   # Guides + design/implementation plans (docs/plans/)

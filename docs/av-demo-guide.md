@@ -16,7 +16,12 @@ python demo/agent_ready_av_demo.py --mock-mcp
 that serves the 7 read tools (plus 6 remediation action tools used by the self-healing loop) from a
 mutable Pearl-2-Room320B model. Nothing but silkroute + Ollama is
 required: no `epiphan-mcp-server` clone, no Pearl hardware, no HTTP layer. This is the recommended
-first-touch demo and mirrors what the dashboard's **AV/Edge Demo** page (`/demo`) visualizes.
+first-touch demo and mirrors what the dashboard's landing page (**Agent-Ready AV**, `/`) visualizes.
+
+The dashboard's trace defaults to a scripted replay of this exact flow (zero external deps — works
+even without Ollama running), but the **"Run live agent"** button on that page — or
+`curl -N 'localhost:8787/demo/stream?live=true'` directly — runs this same script's logic for real,
+live, over SSE.
 
 Use `--mock-pearl` (below) or the live path only when you specifically want the *real*
 `epiphan-mcp-server` in the loop.
@@ -143,7 +148,7 @@ If you get an error instead of an answer, the usual causes are: `ollama serve` n
 not pulled (check `ollama list`), or `../epiphan-mcp-server/.venv` missing — pass `--epiphan-python`
 to point at the right interpreter (see Prerequisites).
 
-## Before sharing with Vadim — checklist
+## Pre-demo checklist
 
 1. `ollama serve` is running, and the model you intend to demo is actually pulled (`ollama list`).
 2. If demoing telemetry: model-finops is reachable, `FINOPS_INGEST_TOKEN` matches on both sides,
@@ -152,5 +157,3 @@ to point at the right interpreter (see Prerequisites).
    and (if telemetry is on) that a fresh row shows up on the dashboard within a few seconds.
 4. Know going in that the cost column will read $0.00 — mention it proactively rather than let it
    look like something's broken mid-demo.
-5. Per the earlier decision on this thread: don't frame this as an Epiphan partnership pitch —
-   it's your own side-project work, shown as "here's what's possible," not an org-level ask.
