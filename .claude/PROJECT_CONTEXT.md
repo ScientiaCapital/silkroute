@@ -1,42 +1,47 @@
 # silkroute
 
-**Branch**: main | **Updated**: 2026-07-17
+**Branch**: main | **Updated**: 2026-07-18
 
 ## Status
 Model-agnostic AI agent orchestrator (Chinese-LLM-optimized) — and the **AI-first orchestration
-backbone** for the agentic AV control plane. Phases 0–3 + the model-agnostic/live-room/self-healing
-sprint are on `main` (`70b8055`): production security gate, MCP server (`silkroute mcp serve`) +
-N-server client bridge, self-contained AV/edge demo, fit-to-hardware routing + `raspberry-pi` profile,
-**western frontier models** in the registry, a **live SSE room view**, and a **self-healing
-room-health ResearchTarget**. **1092 tests passing**; `ruff check src/` at the 5-error baseline.
-Positioning: **embrace** Hermes/OpenClaw as front-ends (not compete); SilkRoute sits **above** OpenAV.
+backbone** for the agentic AV control plane. On `main` (`2243dc1`): production security gate, MCP
+server + N-server bridge, self-contained AV/edge demo, fit-to-hardware routing + `raspberry-pi`,
+western frontier models, live SSE room view, a self-healing room-health `ResearchTarget`, **and now a
+CLOSED self-healing loop** — detect fault → pick fix from the playbook → call an MCP action tool →
+re-read to verify, watchable live on `/demo`. **1115 tests passing**; `ruff check src/` at the
+5-error baseline. Positioning: **embrace** Hermes/OpenClaw as front-ends; SilkRoute sits **above** OpenAV.
 
-## Done (This Session — model-agnostic + live room + self-healing sprint)
-1. [x] **Western frontier models** (`fa6097b`) — Claude Sonnet 5 + GPT-5.6 Sol (PREMIUM), Gemini 3.5
-       Flash + GPT-5.6 Luna (STANDARD) as one-line `ModelSpec`s; provider=ANTHROPIC/OPENAI/GOOGLE route
-       via the OpenRouter fallback with **zero router changes**. Registry 17→21. Chinese/local stay
-       first in every routing chain (local-first posture). Slugs/pricing verified vs openrouter.ai.
-2. [x] **Live SSE room view** (`e0d7697`) — new un-gated `/demo/room` + `/demo/stream` (SSE
-       Think→Act→Observe trace, driven by the real mock tool output). Dashboard `/demo` now streams
-       live via a `"use client"` `LiveRoomView` (EventSource) with static fallback. Verified end-to-end
-       in a real browser (Playwright): LIVE badge + streamed trace + live fleet row.
-3. [x] **Self-healing room-health target** (`70b8055`) — 2nd `ResearchTarget` (#26). Agent evolves a
-       remediation **playbook** (`demo/room_health/remediation_rules.yaml`) scored against held-out
-       fault scenarios; playbook-as-artifact fits the file-edit/git engine with **no engine changes**.
-       Metrics mapped onto existing fields. Smoke-run verified end-to-end (14B correctly targeted the
-       unhandled fault, engine discarded the mangled YAML — clean keep needs a cloud model, see below).
+## Done (This Session — closed the self-healing loop)
+1. [x] **Shared playbook engine** (`320ab70`) — extracted `autoresearch/playbook.py`
+       (`load_playbook`/`decide_action`/`KNOWN_ACTIONS`) so the scoring target AND the runtime
+       executor use ONE engine. Pure refactor; room-health tests unchanged.
+2. [x] **Mutable mock room + 6 action tools** (`1788965`) — `demo/mock_epiphan_mcp.py` is now a
+       mutable Room320B; action tools (start_recorder, restart_input, rotate_recordings,
+       remount_storage, reboot_device, throttle_channels) mutate state so a re-read verifies the fix.
+       Fault injection via `SILKROUTE_MOCK_ROOM_FAULT`. Healthy defaults byte-compatible with before.
+3. [x] **Remediation executor** (`c96d2c9`) — `autoresearch/heal.py` (`heal_room`/`heal_with_mock`)
+       reuses `connect_mcp_server` + `ToolRegistry.execute` + the shared playbook. `demo/
+       self_healing_demo.py` heals 3/6 with the seed playbook (matches the 0.67 score), 6/6 with a
+       complete one. Executor uses its OWN allowlist (read+action); production allowlist stays read-only.
+4. [x] **Watchable in the browser** (`2243dc1`) — un-gated `GET /demo/heal?fault=<type>` SSE + an
+       "Inject fault → Heal" panel in `LiveRoomView`. Verified in a real browser (Playwright): inject
+       signal_loss → streamed detect→fix→verify → "✓ Healed autonomously".
 
 ## Next
 1. [ ] **Cloud model for a clean autoresearch keep** — set `SILKROUTE_OPENROUTER_API_KEY`, run
-       `silkroute research start -t room-health -m deepseek/deepseek-v3.2` (local 14B mangles YAML;
-       too weak for a clean keep — confirmed in the smoke run).
-2. [ ] **Live `run_agent` mode for `/demo/stream`** — swap the deterministic replay for a real agent
-       run when a model is reachable (query toggle); the replay stays the zero-dep default.
-3. [ ] EC20 hardware verification; dashboard live-room view for real rooms (once Pearl/EC20 on bench).
+       `silkroute research start -t room-health -m deepseek/deepseek-v3.2`, then re-run
+       `python demo/self_healing_demo.py` (the evolved playbook should heal more rooms). Local 14B
+       mangles YAML — too weak for a clean keep.
+2. [ ] **Surface autonomy in the dashboard** — no UI shows the experiment `Ledger`
+       (`.silkroute/autoresearch/results.tsv`; `Ledger.read/recent/best/count`) or `agent_memories`
+       (endpoint `/memories` exists, no page). A "Research/Autonomy" page is greenfield + high-signal.
+3. [ ] **Wire western models into the dashboard Models page** — it's static (`dashboard/src/lib/
+       models.ts`, 13 Chinese models, hardcoded "Chinese LLMs" copy); the API already serves all 21
+       via `GET /models`. Either add 4 entries or switch the page to fetch live.
+4. [ ] **Live `run_agent` mode for `/demo/stream`**; EC20 hardware verification (bench).
 
 ## Blockers
-- No cloud provider key in `.env` → autoresearch clean-keep still blocked (local 14B flakes; smoke-
-  confirmed the engine discards its bad edits safely).
+- No cloud provider key in `.env` → autoresearch clean-keep still blocked (local 14B flakes).
 - Live AV run needs Pearl/EC20 + OpenAV orchestrator on the bench (EC20 endpoints are placeholders).
 
 ## Working from the AV side?
