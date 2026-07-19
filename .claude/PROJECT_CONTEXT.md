@@ -10,9 +10,26 @@ just scripted replay), fit-to-hardware routing + `raspberry-pi`, western frontie
 self-healing loop, and a **restructured dashboard** — the AV/Edge Demo is the landing page (`/`),
 everything else (Overview/Projects/Models/Budget/Task History/Autonomy) lives under `/ops/*`.
 **1124 tests passing**; `ruff check src/` clean (0 errors). Positioning: **embrace** Hermes/OpenClaw
-as front-ends; SilkRoute sits **above** OpenAV.
+as front-ends; SilkRoute sits **above** OpenAV. **2026-07-18 PM:** first real EC20 device control
+proven (VISCA-over-IP, tcp/5678); cloud autoresearch working (deepseek-v3.2); room-health playbook
+evolved 6/9→9/9 and merged (`a232360`).
 
-## Done (This Session — sprint: harden, restructure, ship)
+## Done (This Session — live EC20 control + cloud autoresearch, 2026-07-18 PM)
+1. [x] **First real device control** — reached the live EC20 PTZ camera (`192.168.8.11`, DHCP) after
+       finding **NordVPN NordLynx was blackholing the LAN**. Mapped its real control surface: Digest
+       auth (not Basic), a proprietary JWT-gated `/api` dispatcher (OEM "VHDIPC", fw 3.3.40), and —
+       the win — **VISCA-over-IP on tcp/5678**. Drove a real bounded pan→restore cycle; camera
+       returned ACK + completion frames. The bridge's REST/Basic `driver.go` is wrong for the EC20.
+       Full facts in memory `ec20-real-device-facts`.
+2. [x] **Cloud autoresearch unblocked** — `SILKROUTE_OPENROUTER_API_KEY` + `deepseek/deepseek-v3.2`
+       ran real bounded loops (a local 14B was too weak). Code target: baseline `0.964`, two legit
+       proposals correctly DISCARDED (no headroom) + 1 no-op crash caught. **room-health: 6/9 → 9/9**
+       fault remediation across 3 kept experiments, merged to `main` via **PR #1** (`a232360`).
+3. [x] **EC20 VISCA build plan approved** for next session — rework only `driver.go` (REST→VISCA);
+       MCP tool contract + Python layer + SilkRoute stay unchanged; AI tracking deferred. Plan
+       captured in memory `ec20-real-device-facts`.
+
+## Done (prior session — sprint: harden, restructure, ship)
 1. [x] **Tech-debt cleanup** (`560e332`, `9f5ba33`) — 5 ruff errors in `cli.py`, dead
        `ANN101/ANN102` ruff-ignore, deduped 3x-repeated `SupervisorSessionResponse` construction
        into `_session_to_response`/`_steps_to_response` helpers.
@@ -57,16 +74,23 @@ as front-ends; SilkRoute sits **above** OpenAV.
        `/api/v1/models` returns 200 (344 models). Unblocks cloud-model autoresearch keep.
 
 ## Next
-1. [ ] **Cloud model for a clean autoresearch keep** — run
-       `silkroute research start -t room-health -m deepseek/deepseek-v3.2`, then re-run
-       `python demo/self_healing_demo.py`. Local 14B mangles YAML — too weak for a clean keep.
-2. [ ] **EC20 hardware verification** (bench) — EC20 endpoints are still placeholders.
+1. [ ] **EC20 VISCA driver build** (approved plan, see memory `ec20-real-device-facts`) — Python VISCA
+       prototype on the live camera to confirm zoom/preset/home frames + degree↔unit calibration →
+       rework `epiphan-openav-bridge/openav-epiphan-ec20/source/driver.go` (REST→VISCA via one
+       `ec20SendVISCA` TCP seam, drop Basic auth, keep all validation) + fake-TCP tests → register
+       `openav-mcp` in SilkRoute `MCPConfig.servers` (`config/settings.py:344`) → agent physically
+       drives the EC20 in plain English. AI tracking deferred (not standard VISCA).
+2. [ ] **Pearl Mini** (`192.168.10.1`) — on a separate subnet this Mac can't route to; sort routing
+       (static route via the LAN gateway, or a direct connection) before device work.
 3. [ ] Consider whether the live-demo's residual "Task exception was never retrieved" log noise
-       (upstream `mcp`/anyio interaction, see Done #4) is worth reporting upstream to the `mcp`
-       Python SDK, or revisiting with a cooperative-cancellation approach in `run_agent` itself.
+       (upstream `mcp`/anyio interaction, see prior-session Done #4) is worth reporting upstream to
+       the `mcp` Python SDK, or revisiting with a cooperative-cancellation approach in `run_agent`.
 
 ## Blockers
-- Live AV run needs Pearl/EC20 + OpenAV orchestrator on the bench (EC20 endpoints are placeholders).
+- EC20 is reachable + VISCA-proven, but its `driver.go` still speaks (non-working) REST — the VISCA
+  rework is the next build. Pearl Mini is unreachable (separate subnet). **NordVPN NordLynx**
+  auto-reconnects and blackholes the LAN — disconnect it (app-level; disable auto-connect) for any
+  live device work on this Mac.
 
 ## Working from the AV side?
 The AV control plane lives in the sibling repo **`epiphan-openav-bridge`** — start at its
