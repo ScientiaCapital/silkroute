@@ -413,6 +413,28 @@ GPT_5_6_LUNA = ModelSpec(
     recommended_for=("cost_efficient_frontier", "daily_agent_ops", "tool_heavy_tasks"),
 )
 
+# Smallest western model — fast + cheap + strong tool-calling. The latency-first
+# cloud brain for live-event AV control (a Pi delegates fast commands here). Lands
+# in STANDARD (not FREE — FREE stays $0/local-first) because default AV commands
+# classify STANDARD; Sonnet 5 (PREMIUM) is the reasoning step-up. Uses budget_tokens
+# thinking, not adaptive — fine for tool-calling. Routes openrouter/{model_id}.
+CLAUDE_HAIKU_4_5 = ModelSpec(
+    model_id="anthropic/claude-haiku-4-5",
+    name="Claude Haiku 4.5",
+    provider=Provider.ANTHROPIC,
+    tier=ModelTier.STANDARD,
+    input_cost_per_m=1.00,
+    output_cost_per_m=5.00,
+    context_window=200_000,
+    max_output_tokens=64_000,
+    capabilities=(
+        Capability.CODING,
+        Capability.TOOL_CALLING,
+        Capability.AGENTIC,
+    ),
+    recommended_for=("live_event_control", "low_latency_tool_calling", "fast_device_control"),
+)
+
 # ============================================================================
 # LOCAL MODELS (Ollama — zero API cost)
 # ============================================================================
@@ -556,6 +578,7 @@ ALL_MODELS: dict[str, ModelSpec] = {
     KIMI_K2.model_id: KIMI_K2,
     # Western frontier (via OpenRouter — opt-in, model-agnostic proof)
     CLAUDE_SONNET_5.model_id: CLAUDE_SONNET_5,
+    CLAUDE_HAIKU_4_5.model_id: CLAUDE_HAIKU_4_5,
     GPT_5_6_SOL.model_id: GPT_5_6_SOL,
     GEMINI_3_5_FLASH.model_id: GEMINI_3_5_FLASH,
     GPT_5_6_LUNA.model_id: GPT_5_6_LUNA,
@@ -586,6 +609,7 @@ MODELS_BY_TIER: dict[ModelTier, list[ModelSpec]] = {
         QWEN3_30B,
         GLM_47,
         # Western frontier (opt-in; listed after Chinese to keep local-first posture)
+        CLAUDE_HAIKU_4_5,
         GEMINI_3_5_FLASH,
         GPT_5_6_LUNA,
     ],
@@ -615,6 +639,7 @@ DEFAULT_ROUTING: dict[ModelTier, list[str]] = {
         "z-ai/glm-4.7",
         "qwen/qwen3-30b-a3b",
         # Western frontier last — opt-in fallback, keeps Chinese/local first
+        "anthropic/claude-haiku-4-5",
         "google/gemini-3.5-flash",
         "openai/gpt-5.6-luna",
     ],

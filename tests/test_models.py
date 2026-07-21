@@ -12,11 +12,11 @@ from silkroute.providers.models import (
 
 class TestModelRegistry:
     def test_total_model_count(self):
-        assert len(ALL_MODELS) == 21  # 17 Chinese/local + 4 western frontier
+        assert len(ALL_MODELS) == 22  # 17 Chinese/local + 5 western frontier
 
     def test_tier_distribution(self):
         assert len(MODELS_BY_TIER[ModelTier.FREE]) == 9  # 3 API + 6 local
-        assert len(MODELS_BY_TIER[ModelTier.STANDARD]) == 6  # 4 Chinese + 2 western
+        assert len(MODELS_BY_TIER[ModelTier.STANDARD]) == 7  # 4 Chinese + 3 western (incl. Haiku 4.5)
         assert len(MODELS_BY_TIER[ModelTier.PREMIUM]) == 6  # 4 Chinese + 2 western
 
     def test_free_models_are_free(self):
