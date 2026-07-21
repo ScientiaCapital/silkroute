@@ -1,20 +1,56 @@
 # silkroute
 
-**Branch**: main | **Updated**: 2026-07-18
+**Branch**: main | **Updated**: 2026-07-21
 
 ## Status
 Model-agnostic AI agent orchestrator (Chinese-LLM-optimized) — and the **AI-first orchestration
-backbone** for the agentic AV control plane. On `main` (`5713db6`): production security gate, MCP
-server + N-server bridge, self-contained AV/edge demo (now with a **genuinely live agent mode**, not
-just scripted replay), fit-to-hardware routing + `raspberry-pi`, western frontier models, a CLOSED
-self-healing loop, and a **restructured dashboard** — the AV/Edge Demo is the landing page (`/`),
-everything else (Overview/Projects/Models/Budget/Task History/Autonomy) lives under `/ops/*`.
-**1124 tests passing**; `ruff check src/` clean (0 errors). Positioning: **embrace** Hermes/OpenClaw
-as front-ends; SilkRoute sits **above** OpenAV. **2026-07-18 PM:** first real EC20 device control
-proven (VISCA-over-IP, tcp/5678); cloud autoresearch working (deepseek-v3.2); room-health playbook
-evolved 6/9→9/9 and merged (`a232360`).
+backbone** for the agentic AV control plane. On `main` (`e848b3e`): production security gate, MCP
+server + N-server bridge (epiphan + **openav presets**), self-contained AV/edge demo with live agent
+mode, **hardware-aware fit-to-hardware routing (now actually wired)**, western frontier models incl.
+**Claude Haiku 4.5**, a CLOSED self-healing loop, restructured dashboard. **Suite fully green:
+1141 passed / 0 failed** (first time since the 9/9 playbook landed); `ruff check src/` clean.
+Positioning: **embrace** Hermes/OpenClaw as front-ends; SilkRoute sits **above** OpenAV;
+**epiphan-mcp-server (Vadim's) = the fleet plane we integrate with, never fork**.
 
-## Done (This Session — live EC20 control + cloud autoresearch, 2026-07-18 PM)
+## Done (This Session — "Vadim-Ready" sprint stories A–E, 2026-07-21)
+1. [x] **Dual adversarial audit** (devil's-advocate observer + stakeholder pass; records in
+       `.claude/observers/`) → all BLOCKERs/RISKs fixed: `run_agent` no longer constructs the full
+       `SilkRouteSettings` (new narrow `DeploymentConfig` — the provider validator raised in keyless
+       envs, breaking 20 tests in CI-like environments); router local-fit now **gated on
+       `SILKROUTE_OLLAMA_ENABLED`** (a RAM-rich profile alone can no longer route to an Ollama that
+       isn't running); openav allowlist corrected (added `ec20_jog`+`ec20_preset_save`, dropped
+       uncalibrated `ec20_ptz`, catalog is 12 tools); "~115 tools" → ~130 (Vadim's actual count);
+       generic IPs/creds in templates; bridge guide truth-ups.
+2. [x] **Green main** — PR #2: frozen fixture seed (`tests/fixtures/seed_remediation_rules.yaml`,
+       byte-exact pre-PR#1 playbook) for the 7 seed-narrative tests + live-playbook 9/9 invariant
+       tests + finops env isolation (cross-test pollution via upstream `load_dotenv()`). 1132 passed.
+3. [x] **Edge sprint merged** — PR #3: Claude Haiku 4.5 ModelSpec (STANDARD, latency-first western
+       option, registry 21→22); hardware-profile wire into `run_agent()`→`select_model()` (was dead
+       code); local-fit FREE+STANDARD (PREMIUM always cloud; Pi=0GB delegates all);
+       `SILKROUTE_MCP_OPENAV_*` preset (read-only default, `MUTATING` opt-in via `--read-only`);
+       `docs/edge-deployment.md` (RPi5/Ubuntu room controller); README EC20 truth-up.
+4. [x] **Bridge repo** — parallel session shipped the full EC20 hybrid driver to bridge main
+       (VISCA tcp/5678 + jog/preset_save tools + Pi runbook); our audit doc fixes merged as bridge
+       PR #1 (Pearl-claims honesty, systemd `.env` gap, 12-tool count).
+5. [x] **Mock stack-up PROVEN (sprint Story E)** — SilkRoute spawned openav-mcp (stdio, mock,
+       read-only): `mcp_bridge_connected tools_discovered=3 tools_registered=3`; agent called
+       `pearl_status(device='room-pearl')` + `ec20_status(device='room-cam')` and reported status.
+       3 iterations, <$0.01 (deepseek-v3.2). Trace: scratchpad `story_e_full.log`.
+
+## Next (sprint stories F–H — F is the send gate)
+1. [ ] **F: LIVE hardware verify** — needs: Mac on the 192.168.8.x AV switch (NordVPN OFF — it
+       auto-reconnects), Pearl admin password, safe recording window. Then: re-discover DHCP IPs →
+       EC20 degree↔unit calibration sweep → set `panUnitsPerDegree`/`tiltUnitsPerDegree` in bridge
+       `driver.go` (+ re-add `ec20_ptz` to the allowlist) → first live Pearl REST contact → e2e
+       agent demo (`MUTATING=true`) with captured trace.
+2. [ ] **G: Vadim package** — `docs/ECOSYSTEM.md` (3-repo roles/boundaries/seams,
+       shipped-vs-vision, hardware-verified matrix) + email-ready brief + PROJECT_CONTEXT refreshes.
+3. [ ] **H: send-readiness checklist** (see plan file / task board).
+Backlog (papercuts from audits): fail-loud when an enabled MCP preset registers 0 tools; MCP stdio
+env docstring overclaims (SDK forwards only a 6-var allowlist); live-event latency timing test on
+real hardware; PROJECT_CONTEXT Pearl-IP history says 192.168.10.1 — operational value is 192.168.8.4.
+
+## Done (2026-07-18 PM — live EC20 control + cloud autoresearch)
 1. [x] **First real device control** — reached the live EC20 PTZ camera (`192.168.8.11`, DHCP) after
        finding **NordVPN NordLynx was blackholing the LAN**. Mapped its real control surface: Digest
        auth (not Basic), a proprietary JWT-gated `/api` dispatcher (OEM "VHDIPC", fw 3.3.40), and —
@@ -73,24 +109,13 @@ evolved 6/9→9/9 and merged (`a232360`).
        (gitignored; not pushed). Verified: key loads via `_resolve_api_key()`, OpenRouter
        `/api/v1/models` returns 200 (344 models). Unblocks cloud-model autoresearch keep.
 
-## Next
-1. [ ] **EC20 VISCA driver build** (approved plan, see memory `ec20-real-device-facts`) — Python VISCA
-       prototype on the live camera to confirm zoom/preset/home frames + degree↔unit calibration →
-       rework `epiphan-openav-bridge/openav-epiphan-ec20/source/driver.go` (REST→VISCA via one
-       `ec20SendVISCA` TCP seam, drop Basic auth, keep all validation) + fake-TCP tests → register
-       `openav-mcp` in SilkRoute `MCPConfig.servers` (`config/settings.py:344`) → agent physically
-       drives the EC20 in plain English. AI tracking deferred (not standard VISCA).
-2. [ ] **Pearl Mini** (`192.168.10.1`) — on a separate subnet this Mac can't route to; sort routing
-       (static route via the LAN gateway, or a direct connection) before device work.
-3. [ ] Consider whether the live-demo's residual "Task exception was never retrieved" log noise
-       (upstream `mcp`/anyio interaction, see prior-session Done #4) is worth reporting upstream to
-       the `mcp` Python SDK, or revisiting with a cooperative-cancellation approach in `run_agent`.
-
-## Blockers
-- EC20 is reachable + VISCA-proven, but its `driver.go` still speaks (non-working) REST — the VISCA
-  rework is the next build. Pearl Mini is unreachable (separate subnet). **NordVPN NordLynx**
-  auto-reconnects and blackholes the LAN — disconnect it (app-level; disable auto-connect) for any
-  live device work on this Mac.
+## Resolved from earlier sessions (kept for history; see the 2026-07-21 sections above)
+- EC20 VISCA driver build: SHIPPED (bridge main `70b2822`+; SilkRoute wiring in PR #3).
+- Pearl Mini routing red herring: the `192.168.10.1` lead was the router's other leg — the Pearl is
+  **`192.168.8.4`** on the same subnet as the EC20 (per the on-device screen); live contact pending
+  (sprint Story F).
+- Still open (backlog): the live-demo's "Task exception was never retrieved" log noise (upstream
+  `mcp`/anyio interaction) — report upstream or cooperative cancellation in `run_agent`.
 
 ## Working from the AV side?
 The AV control plane lives in the sibling repo **`epiphan-openav-bridge`** — start at its
