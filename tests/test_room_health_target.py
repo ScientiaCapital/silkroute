@@ -13,6 +13,11 @@ from silkroute.autoresearch.targets.room_health import RoomHealthTarget
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SCENARIOS = REPO_ROOT / "demo" / "room_health" / "fault_scenarios.json"
 
+# The ORIGINAL intentionally-incomplete seed playbook (6/9 scenarios), frozen as a
+# fixture. The live demo/room_health/remediation_rules.yaml has since been evolved
+# to 9/9 (PR #1), so tests about seed behavior must use this frozen copy.
+SEED_FIXTURE = Path(__file__).resolve().parent / "fixtures" / "seed_remediation_rules.yaml"
+
 # A correct, well-ordered playbook — specific causes before general ones — that
 # remediates every fault scenario without over-firing on the healthy room.
 COMPLETE_PLAYBOOK = """\
@@ -64,12 +69,23 @@ class TestProtocol:
 
 class TestEvaluation:
     @pytest.mark.asyncio
-    async def test_seed_playbook_is_partial(self) -> None:
-        # The shipped seed intentionally leaves faults unhandled.
-        m = await RoomHealthTarget(REPO_ROOT).evaluate()
+    async def test_seed_playbook_is_partial(self, tmp_path: Path) -> None:
+        # The frozen seed intentionally leaves faults unhandled.
+        m = await _target_with_playbook(tmp_path, SEED_FIXTURE.read_text()).evaluate()
         assert m.lint_clean is True
         assert 0.0 < m.pass_rate < 1.0
         assert m.total_tests == 9
+
+    @pytest.mark.asyncio
+    async def test_live_playbook_is_complete(self) -> None:
+        # The SHIPPED playbook was evolved to full coverage (PR #1) — pin that:
+        # valid rules, all 9 scenarios remediated, 100% signal coverage.
+        m = await RoomHealthTarget(REPO_ROOT).evaluate()
+        assert m.lint_clean is True
+        assert m.pass_rate == 1.0
+        assert m.coverage_pct == 1.0
+        assert m.total_tests == 9
+        assert m.tests_passed == 9
 
     @pytest.mark.asyncio
     async def test_complete_playbook_scores_perfect(self, tmp_path: Path) -> None:
@@ -81,8 +97,12 @@ class TestEvaluation:
 
     @pytest.mark.asyncio
     async def test_complete_beats_seed(self, tmp_path: Path) -> None:
-        seed = await RoomHealthTarget(REPO_ROOT).evaluate()
-        complete = await _target_with_playbook(tmp_path, COMPLETE_PLAYBOOK).evaluate()
+        seed = await _target_with_playbook(
+            tmp_path / "seed", SEED_FIXTURE.read_text()
+        ).evaluate()
+        complete = await _target_with_playbook(
+            tmp_path / "complete", COMPLETE_PLAYBOOK
+        ).evaluate()
         # A better playbook must score higher — this is what drives KEEP.
         assert complete.is_better_than(seed)
 
@@ -110,10 +130,11 @@ class TestEvaluation:
 
 class TestContext:
     @pytest.mark.asyncio
-    async def test_context_lists_unhandled_faults(self) -> None:
-        ctx = await RoomHealthTarget(REPO_ROOT).build_context(recent_entries=[])
+    async def test_context_lists_unhandled_faults(self, tmp_path: Path) -> None:
+        target = _target_with_playbook(tmp_path, SEED_FIXTURE.read_text())
+        ctx = await target.build_context(recent_entries=[])
         assert "Faults NOT yet remediated" in ctx
-        # The seed doesn't handle cpu overload — the context should surface it.
+        # The frozen seed doesn't handle cpu overload — the context should surface it.
         assert "cpu_overload" in ctx
 
     @pytest.mark.asyncio
