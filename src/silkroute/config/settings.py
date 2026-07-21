@@ -65,6 +65,25 @@ class ProviderConfig(BaseSettings):
     )
 
 
+class DeploymentConfig(BaseSettings):
+    """Narrow deployment-level settings safe to read from hot paths.
+
+    ``run_agent`` needs the hardware profile per run, but constructing the full
+    ``SilkRouteSettings`` there would (a) re-parse every nested config and (b)
+    trip the cross-field at-least-one-provider validator in environments with no
+    provider key configured (e.g. unit tests) — a ValidationError before the
+    agent even starts. This mirrors the other narrow configs (env-only, no
+    cross-field validation).
+    """
+
+    model_config = SettingsConfigDict(env_prefix="SILKROUTE_")
+
+    hardware_profile: HardwareProfile = Field(
+        default=HardwareProfile.MAC_MINI,
+        description="Deployment hardware profile (same env var as SilkRouteSettings)",
+    )
+
+
 class BudgetConfig(BaseSettings):
     """Per-project and global budget governance."""
 
@@ -336,23 +355,92 @@ class MCPConfig(BaseSettings):
             "get_fleet_status",
         ],
         description=(
-            "Subset of epiphan-mcp-server's ~115 tools to register — keeps a "
+            "Subset of epiphan-mcp-server's ~130 tools to register — keeps a "
             "small local model from drowning in tool schemas. Empty list means "
             "register everything the server exposes."
         ),
     )
+    openav_enabled: bool = Field(
+        default=False,
+        description="Enable the MCP bridge to openav-mcp (epiphan-openav-bridge)",
+    )
+    openav_command: str = Field(
+        default="python",
+        description=(
+            "Executable used to launch openav-mcp. Must be a Python interpreter "
+            "with openav_mcp installed — usually the absolute path to that repo's "
+            "own venv (e.g. /path/to/epiphan-openav-bridge/openav-mcp/.venv/bin/"
+            "python), not a bare 'python' resolved from PATH."
+        ),
+    )
+    openav_args: list[str] = Field(
+        default_factory=lambda: ["-m", "openav_mcp"],
+        description="Args passed to openav_command to start the server",
+    )
+    openav_mutating: bool = Field(
+        default=False,
+        description=(
+            "Allow device-mutating tools (PTZ moves, preset recall, recording "
+            "control). Default False launches the server with --read-only so only "
+            "status/inspection tools are exposed — control is opt-in per "
+            "deployment, matching the epiphan read-only posture."
+        ),
+    )
+    openav_devices: str = Field(
+        default="",
+        description=(
+            "OPENAV_DEVICES env var passed to the subprocess — a JSON array of "
+            '{"alias","host","username","password","kind"} device records '
+            '(kind: "pearl" | "ec20").'
+        ),
+    )
+    openav_orchestrator_url: str = Field(
+        default="", description="OPENAV_ORCHESTRATOR_URL for the subprocess (scene tools)"
+    )
+    openav_pearl_url: str = Field(
+        default="", description="OPENAV_PEARL_URL for the subprocess (Pearl microservice)"
+    )
+    openav_ec20_url: str = Field(
+        default="", description="OPENAV_EC20_URL for the subprocess (EC20 microservice)"
+    )
+    openav_tool_allowlist: list[str] = Field(
+        default_factory=lambda: [
+            # Read/status (survive --read-only)
+            "list_room_controls",
+            "pearl_status",
+            "ec20_status",
+            # Mutating (exposed only when openav_mutating=True)
+            "set_room_state",
+            "run_scene",
+            "pearl_control_recording",
+            "pearl_singletouch",
+            "ec20_jog",
+            "ec20_preset_recall",
+            "ec20_preset_save",
+        ],
+        description=(
+            "Subset of openav-mcp's 12-tool catalog to register — an explicit "
+            "allowlist keeps the schema surface stable for small local models. "
+            "Deliberately absent: ec20_tracking (deferred — not controllable via "
+            "VISCA yet) and ec20_ptz (absolute-degree moves use PLACEHOLDER "
+            "calibration constants; re-add after on-hardware calibration — "
+            "ec20_jog is the bridge's preferred live-framing verb and is "
+            "calibration-independent)."
+        ),
+    )
     servers: list[MCPServerConfig] = Field(
         default_factory=list,
-        description="Additional MCP tool servers to connect, beyond the epiphan preset.",
+        description="Additional MCP tool servers to connect, beyond the epiphan/openav presets.",
     )
 
     def enabled_servers(self) -> list[MCPServerConfig]:
         """Normalize all configured servers into one list to connect.
 
-        Combines the epiphan preset (when ``epiphan_enabled``) with any explicit
-        ``servers``. This is the single place that knows the epiphan back-compat
-        shim — the bridge core stays server-agnostic. The epiphan preset comes
-        first so its tools take precedence on name collisions.
+        Combines the epiphan preset (when ``epiphan_enabled``) and the openav
+        preset (when ``openav_enabled``) with any explicit ``servers``. This is
+        the single place that knows the preset shims — the bridge core stays
+        server-agnostic. The epiphan preset comes first so its tools take
+        precedence on name collisions.
         """
         result: list[MCPServerConfig] = []
         if self.epiphan_enabled:
@@ -372,6 +460,31 @@ class MCPConfig(BaseSettings):
                     args=self.epiphan_args,
                     env=env,
                     tool_allowlist=self.epiphan_tool_allowlist,
+                )
+            )
+        if self.openav_enabled:
+            openav_env = {
+                k: v
+                for k, v in {
+                    "OPENAV_DEVICES": self.openav_devices,
+                    "OPENAV_ORCHESTRATOR_URL": self.openav_orchestrator_url,
+                    "OPENAV_PEARL_URL": self.openav_pearl_url,
+                    "OPENAV_EC20_URL": self.openav_ec20_url,
+                }.items()
+                if v
+            }
+            args = list(self.openav_args)
+            if not self.openav_mutating and "--read-only" not in args:
+                # Control tools are opt-in: default posture launches the server
+                # read-only so only status/inspection tools exist at all.
+                args.append("--read-only")
+            result.append(
+                MCPServerConfig(
+                    name="openav",
+                    command=self.openav_command,
+                    args=args,
+                    env=openav_env,
+                    tool_allowlist=self.openav_tool_allowlist,
                 )
             )
         result.extend(self.servers)
