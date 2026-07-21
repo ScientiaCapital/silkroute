@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -306,8 +307,22 @@ class TestDemoHeal:
         assert result["data"]["outcome"] == "healed"
         assert resp.text.rstrip().endswith("[DONE]")
 
-    def test_heal_reports_unhandled_fault(self, app: TestClient) -> None:
-        # cpu_overload is NOT handled by the seed playbook → detected, not fixed.
+    def test_heal_reports_unhandled_fault(
+        self, app: TestClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # The LIVE playbook now heals every fault (PR #1), so pin the "detected,
+        # not fixed" reporting path against the frozen seed fixture, which has
+        # no cpu_overload rule.
+        import silkroute.autoresearch.heal as heal_module
+
+        seed = Path(__file__).resolve().parent / "fixtures" / "seed_remediation_rules.yaml"
+        real_heal_with_mock = heal_module.heal_with_mock
+
+        async def _heal_with_seed(fault: str, **kwargs: object) -> object:
+            kwargs["playbook_path"] = seed
+            return await real_heal_with_mock(fault, **kwargs)  # type: ignore[arg-type]
+
+        monkeypatch.setattr(heal_module, "heal_with_mock", _heal_with_seed)
         resp = app.get("/demo/heal?fault=cpu_overload&delay=0")
         frames = self._frames(resp.text)
         result = next(f for f in frames if f["type"] == "heal_result")

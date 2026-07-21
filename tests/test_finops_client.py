@@ -3,6 +3,7 @@
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
+import pytest
 
 from silkroute.config.settings import FinopsConfig
 from silkroute.integrations.finops_client import report_usage
@@ -91,7 +92,13 @@ class TestReportUsage:
 
 
 class TestFinopsConfigDefaults:
-    def test_defaults(self) -> None:
+    def test_defaults(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # Isolate from ambient SILKROUTE_FINOPS_* env vars — a developer .env
+        # (or an earlier test that indirectly load_dotenv()s one) would
+        # otherwise override the factory defaults being asserted here.
+        # FinopsConfig declares no env_file, so clearing os.environ suffices.
+        for var in ("ENABLED", "BASE_URL", "TOKEN", "TIMEOUT_SECONDS"):
+            monkeypatch.delenv(f"SILKROUTE_FINOPS_{var}", raising=False)
         cfg = FinopsConfig()
         assert cfg.enabled is False
         assert cfg.base_url == "http://localhost:8000"
