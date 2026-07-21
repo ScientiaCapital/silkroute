@@ -121,9 +121,11 @@ with the camera tracking the presenter"). **OpenAV = the brains; Epiphan = the r
 SilkRoute = the agent backbone above them** (they stay separate — "Epiphan hardware running OpenAV,"
 never "Epiphan OpenAV"). Model-agnostic, on-prem, self-healing.
 
-**Status:** the round-trip (SilkRoute → `openav-mcp`) is verified with no hardware; live control of real
-rooms is the next milestone (EC20 device endpoints are still placeholders). See that repo's `HANDOFF.md`
-to run the stack end-to-end.
+**Status:** the round-trip (SilkRoute → `openav-mcp`) is verified with no hardware, and the bridge's
+EC20 driver now speaks the camera's real control protocol (VISCA over TCP — physical pan/zoom/preset
+motion verified on a live EC20). Still pending on hardware: EC20 degree-calibration for absolute
+moves, and first live contact with a real Pearl. See that repo's `HANDOFF.md` to run the stack, and
+`docs/edge-deployment.md` here for the Raspberry Pi 5 / Ubuntu room-controller deployment.
 
 ## Hardware Deployment Tiers
 
