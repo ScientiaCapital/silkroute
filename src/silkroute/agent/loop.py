@@ -35,7 +35,15 @@ from silkroute.agent.router import (
 )
 from silkroute.agent.session import AgentSession, Iteration, SessionStatus, ToolCall
 from silkroute.agent.tools import create_default_registry, parse_tool_arguments
-from silkroute.config.settings import AgentConfig, BudgetConfig, MCPConfig, MemoryConfig, ModelTier
+from silkroute.config.settings import (
+    AgentConfig,
+    BudgetConfig,
+    DeploymentConfig,
+    HardwareProfile,
+    MCPConfig,
+    MemoryConfig,
+    ModelTier,
+)
 from silkroute.providers.models import ModelSpec, estimate_cost
 
 log = structlog.get_logger()
@@ -53,6 +61,7 @@ async def run_agent(
     workspace_dir: str | None = None,
     daemon_mode: bool = False,
     stream_queue: asyncio.Queue[str | None] | None = None,
+    hardware_profile: HardwareProfile | None = None,
 ) -> AgentSession:
     """Run the ReAct agent loop on a task.
 
@@ -84,8 +93,17 @@ async def run_agent(
     else:
         log.info("agent_started", task=task[:200], tier=tier.value)
 
-    # Step 2: Select model
-    model = select_model(tier, classification.capabilities, model_override)
+    # Step 2: Select model. Honor the deployment's hardware profile (edge
+    # orchestrator): an explicit arg wins, else read SILKROUTE_HARDWARE_PROFILE
+    # via the narrow DeploymentConfig (NOT the full SilkRouteSettings — its
+    # at-least-one-provider validator would raise in keyless envs, and it
+    # re-parses every nested config). This wire activates local-fit /
+    # cloud-delegate routing — before it, the profile never reached select_model.
+    if hardware_profile is None:
+        hardware_profile = DeploymentConfig().hardware_profile
+    model = select_model(
+        tier, classification.capabilities, model_override, hardware_profile,
+    )
     model_string = get_litellm_model_string(model)
 
     if not daemon_mode:

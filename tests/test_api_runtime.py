@@ -186,7 +186,7 @@ class TestModels:
         assert resp.status_code == 200
         data = resp.json()
         assert isinstance(data, list)
-        assert len(data) == 21  # 17 Chinese/local + 4 western frontier
+        assert len(data) == 22  # 17 Chinese/local + 5 western frontier
 
     def test_filter_by_tier(self, app: TestClient) -> None:
         resp = app.get("/models?tier=free")

@@ -73,8 +73,10 @@ def select_model(
     """Select the best model using a priority cascade.
 
     1. User override (--model flag) → direct lookup
-    1.5. Hardware fit (FREE tier only): if a profile is given and a local model
+    1.5. Hardware fit (FREE + STANDARD): if a profile is given and a local model
          fits its RAM budget, run local; otherwise delegate to the cloud cascade.
+         PREMIUM always escalates to the cloud (hardest self-healing/ambiguous
+         work), even on a box that could fit a local model.
     2. Capability-scored selection from tier models
     3. DEFAULT_ROUTING fallback chain (first available)
     4. Absolute fallback: DeepSeek V3.2
@@ -85,10 +87,21 @@ def select_model(
         if model:
             return model
 
-    # Level 1.5: Hardware-fit local routing (edge orchestrator story). Only for
-    # FREE-tier work — STANDARD/PREMIUM always go to the cloud cascade below.
-    if hardware_profile is not None and tier == ModelTier.FREE:
-        local = best_local_model(PROFILE_RAM_GB.get(hardware_profile, 0.0), tier)
+    # Level 1.5: Hardware-fit local routing (edge orchestrator story). Runs a
+    # local model for FREE/STANDARD work when one fits the box's RAM budget so an
+    # Ubuntu/Mac node stays sovereign + offline; PREMIUM escalates to the cloud
+    # cascade below. Local models are registered in the FREE tier (is_free), so we
+    # always search the FREE-tier local pool regardless of the requested tier — a
+    # Pi's 0 GB budget finds nothing and falls through to the cloud for every tier.
+    # Gated on SILKROUTE_OLLAMA_ENABLED: a RAM-rich profile alone must never route
+    # to a local model the deployment isn't actually running — litellm would hit
+    # connection-refused with no cloud fallback and fail the session at iteration 1.
+    if (
+        hardware_profile is not None
+        and tier != ModelTier.PREMIUM
+        and ProviderConfig().ollama_enabled
+    ):
+        local = best_local_model(PROFILE_RAM_GB.get(hardware_profile, 0.0), ModelTier.FREE)
         if local is not None:
             return local
 

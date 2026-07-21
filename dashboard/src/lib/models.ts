@@ -156,6 +156,26 @@ export const ALL_MODELS: ModelSpec[] = [
     activeParamsB: 0,
     recommendedFor: ["tool_heavy_tasks", "multi_step_workflows", "ci_debugging"],
   },
+  {
+    // Western frontier (opt-in via OpenRouter). This static list is only the
+    // offline fallback — the Models page live-fetches GET /models, which is
+    // authoritative for the full registry.
+    modelId: "anthropic/claude-haiku-4-5",
+    name: "Claude Haiku 4.5",
+    provider: "anthropic",
+    tier: "standard",
+    inputCostPerM: 1.0,
+    outputCostPerM: 5.0,
+    contextWindow: 200000,
+    maxOutputTokens: 64000,
+    capabilities: ["coding", "tool_calling", "agentic"],
+    supportsToolCalling: true,
+    isMoe: false,
+    isFree: false,
+    totalParamsB: 0,
+    activeParamsB: 0,
+    recommendedFor: ["live_event_control", "low_latency_tool_calling", "fast_device_control"],
+  },
   // PREMIUM TIER
   {
     modelId: "deepseek/deepseek-r1-0528",

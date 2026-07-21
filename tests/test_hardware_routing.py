@@ -11,6 +11,8 @@ from __future__ import annotations
 import subprocess
 import sys
 
+import pytest
+
 from silkroute.agent.router import (
     PROFILE_RAM_GB,
     best_local_model,
@@ -63,20 +65,46 @@ class TestProfileRamMap:
         assert PROFILE_RAM_GB[HardwareProfile.MAC_STUDIO] >= 24.0
 
 
+@pytest.fixture()
+def ollama_on(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Local-fit routing requires the deployment to actually run Ollama."""
+    monkeypatch.setenv("SILKROUTE_OLLAMA_ENABLED", "true")
+
+
 class TestSelectModelHardware:
-    def test_pi_delegates_to_cloud(self) -> None:
+    def test_pi_delegates_to_cloud(self, ollama_on: None) -> None:
         m = select_model(ModelTier.FREE, hardware_profile=HardwareProfile.RASPBERRY_PI)
         assert m.provider != Provider.OLLAMA  # Pi runs orchestrator, not inference
 
-    def test_capable_box_runs_local(self) -> None:
+    def test_capable_box_runs_local(self, ollama_on: None) -> None:
         m = select_model(ModelTier.FREE, hardware_profile=HardwareProfile.MAC_STUDIO)
         assert m.provider == Provider.OLLAMA
 
-    def test_non_free_tier_stays_cloud_even_on_big_box(self) -> None:
+    def test_standard_runs_local_on_big_box(self, ollama_on: None) -> None:
+        # New edge posture: STANDARD (routine control) runs a local model when one
+        # fits, keeping an Ubuntu/Mac node sovereign + offline.
         m = select_model(ModelTier.STANDARD, hardware_profile=HardwareProfile.MAC_STUDIO)
+        assert m.provider == Provider.OLLAMA
+
+    def test_premium_escalates_to_cloud_even_on_big_box(self, ollama_on: None) -> None:
+        # PREMIUM (hardest self-healing/ambiguous work) always delegates to cloud,
+        # even on a box that could fit a local model.
+        m = select_model(ModelTier.PREMIUM, hardware_profile=HardwareProfile.MAC_STUDIO)
         assert m.provider != Provider.OLLAMA
 
-    def test_no_profile_unchanged(self) -> None:
+    def test_ollama_disabled_never_routes_local(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # THE guard: a RAM-rich profile alone must not select a local model when
+        # the deployment isn't running Ollama (out-of-the-box .env.example config:
+        # profile=mac-mini + OLLAMA_ENABLED=false) — litellm would hit
+        # connection-refused with no cloud fallback and fail at iteration 1.
+        monkeypatch.delenv("SILKROUTE_OLLAMA_ENABLED", raising=False)
+        for tier in (ModelTier.FREE, ModelTier.STANDARD):
+            m = select_model(tier, hardware_profile=HardwareProfile.MAC_STUDIO)
+            assert m.provider != Provider.OLLAMA
+
+    def test_no_profile_unchanged(self, ollama_on: None) -> None:
         m = select_model(ModelTier.FREE, hardware_profile=None)
         assert m.provider != Provider.OLLAMA  # existing behavior: cloud
 
