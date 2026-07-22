@@ -1,6 +1,29 @@
 # silkroute
 
-**Branch**: main | **Updated**: 2026-07-21
+**Branch**: main | **Updated**: 2026-07-22
+
+## ⚡ NEXT SESSION QUICKSTART — Story F: live hardware verification (the send gate)
+Everything is merged + pushed (silkroute `50b48a5`, bridge `90c0d8e`); suites green; mock stack-up
+proven. The ONLY remaining work before the Vadim package is on-hardware. Cold-start steps:
+1. **Preflight** (user-side): Mac plugged into the `192.168.8.x` AV switch; **NordVPN OFF**
+   (it auto-reconnects — check the app's auto-connect setting); have the **Pearl admin password**;
+   agree a safe window for a test recording + a camera calibration sweep.
+2. **Network check**: `route -n get default | grep interface` → must be `en0`, NOT `utun4`;
+   re-discover DHCP IPs (`ping`/`arp` sweep — EC20 was last `192.168.8.11`, Pearl `192.168.8.4`;
+   EC20 identifiable by MAC `d4:e0:8e:…` + VISCA reply on tcp/5678).
+3. **EC20 calibration**: bounded reversible sweep over VISCA tcp/5678 (pattern: scratchpad
+   `ec20_visca_move.py` from 2026-07-18, memory `ec20-real-device-facts` has the working frames) →
+   measure degree↔unit scale → set `panUnitsPerDegree`/`tiltUnitsPerDegree` in bridge
+   `openav-epiphan-ec20/source/driver.go` (currently PLACEHOLDER 14.0) → verify absolute moves →
+   re-add `ec20_ptz` to `MCPConfig.openav_tool_allowlist` (settings.py) + update its comment/tests.
+4. **First live Pearl contact**: `curl -u admin:<pw> http://192.168.8.4/api/v2.0/system/status`,
+   then recording start/stop via the bridge (DEPLOY-RPI5.md step 6 is the script).
+5. **E2E agent demo** (the money shot for the brief): SilkRoute preset env
+   (`SILKROUTE_MCP_OPENAV_ENABLED=true`, `MUTATING=true`, real DEVICES JSON) →
+   `silkroute run "check the room status, move the camera to preset 1, start recording"` →
+   capture the full trace.
+6. Then **Story G**: `docs/ECOSYSTEM.md` + email-ready Vadim brief (evidence: F's trace + the
+   Story E mock log), **Story H**: send-readiness checklist. Sprint plan + task board carry the detail.
 
 ## Status
 Model-agnostic AI agent orchestrator (Chinese-LLM-optimized) — and the **AI-first orchestration
