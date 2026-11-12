@@ -47,7 +47,7 @@ dependencies = [
     "uvicorn[standard]>=0.30.0",
     # mcp 2.x changed the low-level Server API (no list_tools decorator); the demo
     # server and bridge still use 1.x. Lift the cap after porting to 2.x.
-    "mcp>=1.25.0,<2",
+    "mcp>=2.3.0,<3",
 ]
 
 [project.optional-dependencies]
