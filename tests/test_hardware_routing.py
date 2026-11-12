@@ -92,9 +92,7 @@ class TestSelectModelHardware:
         m = select_model(ModelTier.PREMIUM, hardware_profile=HardwareProfile.MAC_STUDIO)
         assert m.provider != Provider.OLLAMA
 
-    def test_ollama_disabled_never_routes_local(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_ollama_disabled_never_routes_local(self, monkeypatch: pytest.MonkeyPatch) -> None:
         # THE guard: a RAM-rich profile alone must not select a local model when
         # the deployment isn't running Ollama (out-of-the-box .env.example config:
         # profile=mac-mini + OLLAMA_ENABLED=false) — litellm would hit
@@ -126,8 +124,6 @@ class TestSlimInstall:
             "import silkroute.autoresearch.llm\n"
             "print('IMPORT_OK')\n"
         )
-        result = subprocess.run(
-            [sys.executable, "-c", code], capture_output=True, text=True
-        )
+        result = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True)
         assert result.returncode == 0, result.stderr
         assert "IMPORT_OK" in result.stdout

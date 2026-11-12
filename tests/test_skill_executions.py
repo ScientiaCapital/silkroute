@@ -29,7 +29,12 @@ class TestInsertSkillExecution:
             "cost_usd": 0.01,
         }
         result = await insert_skill_execution(
-            mock_pool, "web_search", "sess-1", "proj-1", success=True, cost_usd=0.01,
+            mock_pool,
+            "web_search",
+            "sess-1",
+            "proj-1",
+            success=True,
+            cost_usd=0.01,
         )
         assert result["skill_name"] == "web_search"
         assert result["success"] is True
@@ -46,7 +51,12 @@ class TestInsertSkillExecution:
         mock_pool.fetchrow.return_value = {"id": 1, "skill_name": "code"}
         long_output = "x" * 5000
         await insert_skill_execution(
-            mock_pool, "code", "s1", "p1", success=True, output_text=long_output,
+            mock_pool,
+            "code",
+            "s1",
+            "p1",
+            success=True,
+            output_text=long_output,
         )
         # The 8th positional arg is output_text (after the SQL string)
         args = mock_pool.fetchrow.call_args[0]

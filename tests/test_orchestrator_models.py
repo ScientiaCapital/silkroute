@@ -68,9 +68,7 @@ class TestOrchestrationPlan:
 
     def test_independent_tasks_single_stage(self):
         """Tasks with no dependencies should all be in one stage."""
-        plan = OrchestrationPlan(
-            sub_tasks=[SubTask(id="a"), SubTask(id="b"), SubTask(id="c")]
-        )
+        plan = OrchestrationPlan(sub_tasks=[SubTask(id="a"), SubTask(id="b"), SubTask(id="c")])
         stages = plan.stages
         assert len(stages) == 1
         assert len(stages[0]) == 3
@@ -120,9 +118,7 @@ class TestOrchestrationPlan:
 
     def test_invalid_dependency_ignored(self):
         """Dependencies on non-existent task IDs are silently skipped."""
-        plan = OrchestrationPlan(
-            sub_tasks=[SubTask(id="a", depends_on=["nonexistent"])]
-        )
+        plan = OrchestrationPlan(sub_tasks=[SubTask(id="a", depends_on=["nonexistent"])])
         stages = plan.stages
         assert len(stages) == 1
         assert stages[0][0].id == "a"

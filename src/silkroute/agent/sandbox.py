@@ -1,18 +1,36 @@
-"""Shell command sandbox — validates and restricts agent shell execution.
+"""Shell command guard for agent shell execution — NOT a security boundary.
 
-Provides defense-in-depth for LLM-driven shell commands:
-1. Command blocklist: rejects destructive/exfiltration patterns
-2. Working directory enforcement: confines execution to workspace
-3. Resource limits: memory cap + timeout
+What this module does:
+1. Command denylist: rejects a list of obviously destructive / exfiltration
+   patterns (``rm -rf``, ``curl | sh``, ``sudo``, ...). This is a speed bump
+   against accidents and naive prompt injection, not a security boundary: the
+   shell is a full programming language, so a determined or injected command
+   can trivially rephrase around any regex denylist.
+2. Working directory: commands start in the workspace directory (they can
+   still ``cd`` or use absolute paths elsewhere).
+3. Scrubbed environment (:func:`build_sandbox_env`): child processes get only
+   an allowlist of variables (PATH, HOME, LANG, TERM, ...); anything that
+   looks like a credential (``*KEY*``, ``*TOKEN*``, ``*SECRET*``,
+   ``*PASSWORD*``) and all ``SILKROUTE_*`` / ``OPENROUTER_*`` / ``ANTHROPIC_*``
+   variables are dropped, so the agent's own API keys are not visible to it.
+4. Memory cap (:func:`make_preexec_fn`): on POSIX, ``RLIMIT_AS`` is set to
+   ``max_memory_mb`` in the child. Linux enforces it; macOS largely ignores
+   ``RLIMIT_AS``, so treat it as best-effort there.
 
-Prompt injection via malicious repo files can trick the LLM into
-executing arbitrary commands, so we validate even "trusted" LLM output.
+There is no filesystem, network or process isolation here. Commands run as
+the same user, with the same file access and network access as SilkRoute.
+Untrusted workloads (or exposing ``shell_exec`` to untrusted MCP clients /
+prompts) need a real isolation layer such as a container or VM with no
+credentials mounted.
 """
 
 from __future__ import annotations
 
+import os
 import re
-from dataclasses import dataclass
+import sys
+from collections.abc import Callable
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import structlog
@@ -31,33 +49,27 @@ _BLOCKED_PATTERNS: list[tuple[re.Pattern[str], str]] = [
     (re.compile(r"\brm\s+-[a-zA-Z]*f[a-zA-Z]*r[a-zA-Z]*\s"), "recursive forced delete"),
     (re.compile(r"\bmkfs\b"), "filesystem format"),
     (re.compile(r"\bdd\s+.*of=/dev/"), "raw disk write"),
-
     # Download-and-execute patterns (common in prompt injection)
     (re.compile(r"curl\s.*\|\s*(sh|bash|zsh|python|perl)"), "download and execute"),
     (re.compile(r"wget\s.*\|\s*(sh|bash|zsh|python|perl)"), "download and execute"),
     (re.compile(r"curl\s.*>\s*/tmp/.*&&.*sh\s"), "download-write-execute"),
-
     # Dangerous git operations
     (re.compile(r"\bgit\s+push\s+.*--force\b"), "force push"),
     (re.compile(r"\bgit\s+push\s+-f\b"), "force push"),
     (re.compile(r"\bgit\s+reset\s+--hard\b"), "hard reset"),
     (re.compile(r"\bgit\s+clean\s+-[a-zA-Z]*f"), "forced clean"),
-
     # Process/system manipulation
     (re.compile(r"\bkill\s+-9\s+-1\b"), "kill all processes"),
     (re.compile(r"\bkillall\b"), "kill all by name"),
     (re.compile(r"\bchmod\s+.*777\s+/"), "open permissions on root paths"),
     (re.compile(r"\bchown\s+.*root"), "change ownership to root"),
-
     # Network exfiltration
     (re.compile(r"\bnc\s+-[a-zA-Z]*l"), "netcat listener"),
     (re.compile(r"\bssh\s.*-R\s"), "reverse SSH tunnel"),
-
     # Credential theft
     (re.compile(r"cat\s+.*\.ssh/"), "read SSH keys"),
     (re.compile(r"cat\s+.*\.env\b"), "read environment secrets"),
     (re.compile(r"cat\s+.*/etc/(passwd|shadow)"), "read system credentials"),
-
     # Privilege escalation
     (re.compile(r"\bsudo\b"), "sudo usage"),
     (re.compile(r"\bsu\s+-"), "switch user"),
@@ -82,6 +94,9 @@ class SandboxConfig:
     max_memory_mb: int = 512
     blocked_patterns: list[tuple[re.Pattern[str], str]] | None = None
     allow_outside_workspace: bool = False
+    # Extra environment variable names passed through to child processes
+    # (still subject to the credential-name filter).
+    env_allowlist: frozenset[str] = field(default_factory=frozenset)
 
     @property
     def effective_patterns(self) -> list[tuple[re.Pattern[str], str]]:
@@ -159,11 +174,72 @@ def _check_path_traversal(command: str, workspace: Path) -> SandboxViolation | N
     return None
 
 
-def build_sandbox_env(config: SandboxConfig) -> dict[str, str]:
-    """Build environment variables for sandboxed subprocess execution."""
-    import os
+# Variables passed through to child processes by default.
+_ENV_ALLOWLIST: frozenset[str] = frozenset(
+    {
+        "PATH",
+        "HOME",
+        "LANG",
+        "LC_ALL",
+        "LC_CTYPE",
+        "TERM",
+        "USER",
+        "LOGNAME",
+        "SHELL",
+        "TMPDIR",
+        "TZ",
+    }
+)
 
-    env = os.environ.copy()
-    # Set working directory hint
-    env["SILKROUTE_WORKSPACE"] = str(config.workspace_dir)
-    return env
+# Never passed through, even if allowlisted.
+_ENV_DENY_SUBSTRINGS: tuple[str, ...] = ("KEY", "TOKEN", "SECRET", "PASSWORD")
+_ENV_DENY_PREFIXES: tuple[str, ...] = ("SILKROUTE_", "OPENROUTER_", "ANTHROPIC_")
+
+
+def _env_name_denied(name: str) -> bool:
+    upper = name.upper()
+    return upper.startswith(_ENV_DENY_PREFIXES) or any(s in upper for s in _ENV_DENY_SUBSTRINGS)
+
+
+def build_sandbox_env(
+    config: SandboxConfig | None = None,
+    source: dict[str, str] | None = None,
+) -> dict[str, str]:
+    """Build a scrubbed environment for agent child processes.
+
+    Only allowlisted names are kept (``_ENV_ALLOWLIST`` plus
+    ``config.env_allowlist``), and any name that looks like a credential or
+    belongs to SilkRoute / OpenRouter / Anthropic is dropped regardless.
+    """
+    env_source = os.environ if source is None else source
+    allowed = _ENV_ALLOWLIST | (config.env_allowlist if config is not None else frozenset())
+    return {
+        name: value
+        for name, value in env_source.items()
+        if name in allowed and not _env_name_denied(name)
+    }
+
+
+def make_preexec_fn(max_memory_mb: int | None) -> Callable[[], None] | None:
+    """Return a ``preexec_fn`` that caps the child's address space (POSIX only).
+
+    Returns None on Windows or when no cap is configured. Failures to set the
+    limit (e.g. on platforms that reject RLIMIT_AS) are ignored so the child
+    still starts.
+    """
+    if not max_memory_mb or max_memory_mb <= 0 or sys.platform == "win32":
+        return None
+
+    limit = int(max_memory_mb) * 1024 * 1024
+
+    def _apply_limits() -> None:
+        import resource
+
+        try:
+            _soft, hard = resource.getrlimit(resource.RLIMIT_AS)
+            new_hard = limit if hard == resource.RLIM_INFINITY else min(limit, hard)
+            resource.setrlimit(resource.RLIMIT_AS, (min(limit, new_hard), new_hard))
+        except (ValueError, OSError):
+            pass
+
+    return _apply_limits

@@ -88,9 +88,7 @@ class OrchestrationPlan:
 
         # BFS by stages (wave-based Kahn's)
         result_stages: list[list[SubTask]] = []
-        queue: deque[str] = deque(
-            tid for tid, deg in in_degree.items() if deg == 0
-        )
+        queue: deque[str] = deque(tid for tid, deg in in_degree.items() if deg == 0)
 
         processed = 0
         while queue:

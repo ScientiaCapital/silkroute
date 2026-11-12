@@ -70,8 +70,7 @@ class CodeImproverTarget:
             history = "## Recent Experiments\n"
             for entry in recent_entries:
                 history += (
-                    f"- [{entry['status']}] score={entry['score']:.4f} "
-                    f"| {entry['description']}\n"
+                    f"- [{entry['status']}] score={entry['score']:.4f} | {entry['description']}\n"
                 )
             parts.append(history)
 
@@ -130,9 +129,14 @@ class CodeImproverTarget:
         Uses create_subprocess_exec (no shell) for safety.
         """
         proc = await asyncio.create_subprocess_exec(
-            "python", "-m", "pytest",
-            "--cov=src", "--cov-report=term-missing",
-            "-q", "--tb=line", "--no-header",
+            "python",
+            "-m",
+            "pytest",
+            "--cov=src",
+            "--cov-report=term-missing",
+            "-q",
+            "--tb=line",
+            "--no-header",
             cwd=str(self._root),
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
@@ -167,8 +171,7 @@ class CodeImproverTarget:
 
         # Extract failure lines for context
         fail_lines = [
-            line for line in output.splitlines()
-            if line.startswith("FAILED") or "ERROR" in line
+            line for line in output.splitlines() if line.startswith("FAILED") or "ERROR" in line
         ]
         result["error_summary"] = "\n".join(fail_lines[:10])
 
@@ -185,7 +188,9 @@ class CodeImproverTarget:
         Uses create_subprocess_exec (no shell) for safety.
         """
         proc = await asyncio.create_subprocess_exec(
-            "ruff", "check", "src/",
+            "ruff",
+            "check",
+            "src/",
             cwd=str(self._root),
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
@@ -202,8 +207,7 @@ class CodeImproverTarget:
         """Get a brief test summary for LLM context (parsed from the cached eval run)."""
         output = await self._ensure_eval_output()
         lines = [
-            line for line in output.strip().splitlines()
-            if not self._COVERAGE_ROW_RE.match(line)
+            line for line in output.strip().splitlines() if not self._COVERAGE_ROW_RE.match(line)
         ]
         # Return last 30 lines (summary + failures)
         return "\n".join(lines[-30:])

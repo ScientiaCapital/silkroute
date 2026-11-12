@@ -25,7 +25,9 @@ from silkroute.daemon.queue import TaskQueue
 AUTH = {"Authorization": "Bearer test-secret"}
 
 
-def _make_settings(*, environment: str = "development", demo_mode: bool = False) -> SilkRouteSettings:
+def _make_settings(
+    *, environment: str = "development", demo_mode: bool = False
+) -> SilkRouteSettings:
     return SilkRouteSettings(
         environment=environment,
         providers=ProviderConfig(ollama_enabled=True),

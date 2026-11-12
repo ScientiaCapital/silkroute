@@ -13,13 +13,13 @@ class Metrics:
       pass_rate * 0.6 + coverage_pct * 0.3 + lint_clean * 0.1
     """
 
-    pass_rate: float       # 0.0–1.0: tests passing / total tests
-    coverage_pct: float    # 0.0–1.0: line coverage fraction
-    lint_clean: bool       # True if ruff exits 0
-    total_tests: int       # Total number of tests collected
-    tests_passed: int      # Number of tests that passed
-    tests_failed: int      # Number of tests that failed
-    error_summary: str     # Brief summary of failures (empty if clean)
+    pass_rate: float  # 0.0–1.0: tests passing / total tests
+    coverage_pct: float  # 0.0–1.0: line coverage fraction
+    lint_clean: bool  # True if ruff exits 0
+    total_tests: int  # Total number of tests collected
+    tests_passed: int  # Number of tests that passed
+    tests_failed: int  # Number of tests that failed
+    error_summary: str  # Brief summary of failures (empty if clean)
 
     @property
     def score(self) -> float:

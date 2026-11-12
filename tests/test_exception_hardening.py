@@ -15,18 +15,18 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from silkroute.mantis.orchestrator.decomposer import SingleTaskDecomposer
-from silkroute.mantis.orchestrator.runtime import OrchestratorRuntime
 from silkroute.mantis.orchestrator.middleware import RetryConfig
+from silkroute.mantis.orchestrator.runtime import OrchestratorRuntime
 from silkroute.mantis.runtime.interface import AgentResult, RuntimeConfig
 from silkroute.mantis.skills.models import SkillCategory, SkillContext, SkillSpec
 from silkroute.mantis.skills.registry import SkillRegistry
 from silkroute.mantis.supervisor.models import SupervisorPlan, SupervisorStep
 from silkroute.mantis.supervisor.runtime import SupervisorRuntime
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _make_mock_runtime(side_effect=None, return_value=None):
     """Return a mock AgentRuntime."""
@@ -37,9 +37,7 @@ def _make_mock_runtime(side_effect=None, return_value=None):
     elif return_value is not None:
         mock.invoke.return_value = return_value
     else:
-        mock.invoke.return_value = AgentResult(
-            status="completed", output="done", cost_usd=0.01
-        )
+        mock.invoke.return_value = AgentResult(status="completed", output="done", cost_usd=0.01)
     return mock
 
 
@@ -95,9 +93,7 @@ class TestOrchestratorRetryLoopExceptions:
             "silkroute.mantis.orchestrator.middleware.RetryConfig",
             return_value=RetryConfig(max_retries=2, retryable_statuses={"failed"}),
         ):
-            result = await rt.invoke(
-                "test task", RuntimeConfig(budget_limit_usd=1.0)
-            )
+            result = await rt.invoke("test task", RuntimeConfig(budget_limit_usd=1.0))
 
         # ValueError causes immediate break — invoke called exactly once
         assert call_count == 1
@@ -125,12 +121,10 @@ class TestOrchestratorRetryLoopExceptions:
         )
 
         # Inject a retry_config into the middleware context so max_attempts > 1
-        original_execute = rt._execute_sub_task
-
         async def _patched_execute(sub_task, stage_idx, config, middleware, tracker):
             # Force max_attempts = 2 by injecting retry_config into metadata
-            from silkroute.mantis.orchestrator.middleware import MiddlewareContext, RetryConfig
-            import time
+
+            from silkroute.mantis.orchestrator.middleware import RetryConfig
 
             child = mock_child
             child_cfg = RuntimeConfig(budget_limit_usd=1.0)
@@ -161,6 +155,7 @@ class TestOrchestratorRetryLoopExceptions:
                 break
 
             from silkroute.mantis.orchestrator.models import SubAgentResult
+
             return SubAgentResult(
                 sub_task_id=sub_task.id,
                 agent_result=result,
@@ -174,6 +169,7 @@ class TestOrchestratorRetryLoopExceptions:
 
         # ConnectionError allowed retry — invoke called twice
         assert call_count == 2
+        assert result.status == "completed"
 
     @pytest.mark.asyncio
     async def test_type_error_breaks_retry_immediately(self):
@@ -194,8 +190,6 @@ class TestOrchestratorRetryLoopExceptions:
         )
 
         # Patch the execute_sub_task to use our hardened loop with max_attempts=3
-        original_execute = rt._execute_sub_task
-
         async def _patched_execute(sub_task, stage_idx, config, middleware, tracker):
             from silkroute.mantis.orchestrator.middleware import RetryConfig
             from silkroute.mantis.orchestrator.models import SubAgentResult
@@ -263,9 +257,9 @@ class TestSupervisorRetryLoopExceptions:
         mock_child = MagicMock()
         mock_child.invoke = _raising_invoke
 
-        from silkroute.mantis.supervisor.models import SupervisorSession
-        from silkroute.mantis.orchestrator.budget import BudgetTracker
         from silkroute.mantis.context.manager import ContextManager
+        from silkroute.mantis.orchestrator.budget import BudgetTracker
+        from silkroute.mantis.supervisor.models import SupervisorSession
 
         step = SupervisorStep(
             name="step_1",
@@ -304,9 +298,9 @@ class TestSupervisorRetryLoopExceptions:
         mock_child.invoke = _flaky_invoke
 
         # Directly test _execute_step with our hardened logic
-        from silkroute.mantis.supervisor.models import SupervisorSession
-        from silkroute.mantis.orchestrator.budget import BudgetTracker
         from silkroute.mantis.context.manager import ContextManager
+        from silkroute.mantis.orchestrator.budget import BudgetTracker
+        from silkroute.mantis.supervisor.models import SupervisorSession
 
         step = SupervisorStep(
             name="step_1",
@@ -314,12 +308,15 @@ class TestSupervisorRetryLoopExceptions:
             max_retries=2,
             retry_backoff_seconds=0,
         )
-        session = SupervisorSession(project_id="proj", plan=SupervisorPlan(
+        session = SupervisorSession(
             project_id="proj",
-            description="test",
-            steps=[step],
-            total_budget_usd=1.0,
-        ))
+            plan=SupervisorPlan(
+                project_id="proj",
+                description="test",
+                steps=[step],
+                total_budget_usd=1.0,
+            ),
+        )
         tracker = BudgetTracker(total_usd=1.0)
         ctx_mgr = ContextManager.from_legacy_dict({})
 
@@ -417,6 +414,7 @@ class TestCancelledErrorPropagation:
     @pytest.mark.asyncio
     async def test_cancelled_error_propagates_in_orchestrator_execute_sub_task(self):
         """CancelledError in child.invoke() propagates out of _execute_sub_task."""
+
         async def _cancelling_invoke(task, cfg):
             raise asyncio.CancelledError()
 
@@ -428,8 +426,8 @@ class TestCancelledErrorPropagation:
             child_factory=lambda _: mock_child,
         )
 
-        from silkroute.mantis.orchestrator.models import SubTask
         from silkroute.mantis.orchestrator.budget import BudgetTracker
+        from silkroute.mantis.orchestrator.models import SubTask
 
         # SubTask has no 'name' field — use its positional/keyword fields
         sub_task = SubTask(

@@ -94,14 +94,16 @@ def run(
     from silkroute.agent import run_agent
 
     try:
-        asyncio.run(run_agent(
-            task,
-            model_override=model,
-            tier_override=tier,
-            project_id=project,
-            max_iterations=max_iterations,
-            budget_limit_usd=budget,
-        ))
+        asyncio.run(
+            run_agent(
+                task,
+                model_override=model,
+                tier_override=tier,
+                project_id=project,
+                max_iterations=max_iterations,
+                budget_limit_usd=budget,
+            )
+        )
     except KeyboardInterrupt:
         console.print("\n[yellow]Agent interrupted by user.[/yellow]")
     except Exception as e:
@@ -152,12 +154,14 @@ def status() -> None:
 
 @main.command()
 @click.option(
-    "--tier", "-t",
+    "--tier",
+    "-t",
     type=click.Choice(["free", "standard", "premium", "all"]),
     default="all",
 )
 @click.option(
-    "--capability", "-c",
+    "--capability",
+    "-c",
     default=None,
     help="Filter by capability (coding, reasoning, tool_calling, agentic)",
 )
@@ -189,14 +193,18 @@ def models(tier: str, capability: str | None) -> None:
             output_price = "FREE" if m.is_free else f"${m.output_cost_per_m:.2f}"
             ctx = f"{m.context_window // 1024}K"
             moe = "✓" if m.is_moe else ""
-            icon = "🟢" if t == ModelTier.FREE else (
-                "🔵" if t == ModelTier.STANDARD else "🟡"
-            )
+            icon = "🟢" if t == ModelTier.FREE else ("🔵" if t == ModelTier.STANDARD else "🟡")
             tier_label = f"{icon} {t.value}"
 
             table.add_row(
-                tier_label, m.name, m.provider.value,
-                input_price, output_price, ctx, caps, moe,
+                tier_label,
+                m.name,
+                m.provider.value,
+                input_price,
+                output_price,
+                ctx,
+                caps,
+                moe,
             )
 
     console.print(table)
@@ -209,7 +217,11 @@ def models(tier: str, capability: str | None) -> None:
 
 
 @main.command()
-@click.option("--host", default="0.0.0.0", help="Bind address")
+@click.option(
+    "--host",
+    default="127.0.0.1",
+    help="Bind address (use 0.0.0.0 to listen on every interface)",
+)
 @click.option("--port", "-p", default=8787, type=int, help="Listen port")
 @click.option("--reload", is_flag=True, default=False, help="Enable auto-reload (dev)")
 def api(host: str, port: int, reload: bool) -> None:
@@ -528,7 +540,10 @@ def mcp() -> None:
 @click.option(
     "--workspace",
     default=None,
-    help="Sandbox workspace dir for shell/file tools (only relevant with --allow/--all).",
+    help=(
+        "Workspace root for file/shell tools (default: current directory). "
+        "REQUIRED when exporting shell_exec or write_file."
+    ),
 )
 def mcp_serve(name: str, allow: tuple[str, ...], expose_all: bool, workspace: str | None) -> None:
     """Serve SilkRoute's ToolRegistry as an MCP server over stdio.
@@ -539,11 +554,14 @@ def mcp_serve(name: str, allow: tuple[str, ...], expose_all: bool, workspace: st
     """
     import asyncio
     import contextlib
+    import os
 
     from silkroute.agent.tools import create_default_registry
     from silkroute.mcp_bridge.server import DEFAULT_EXPORT_ALLOWLIST, serve_stdio
 
-    registry = create_default_registry(workspace_dir=workspace)
+    # Always configure a workspace root so file/grep/git tools are confined
+    # to it (the current directory unless --workspace is given).
+    registry = create_default_registry(workspace_dir=workspace or os.getcwd())
 
     export_allowlist: set[str] | None
     if expose_all:
@@ -553,6 +571,14 @@ def mcp_serve(name: str, allow: tuple[str, ...], expose_all: bool, workspace: st
         export_allowlist = set(DEFAULT_EXPORT_ALLOWLIST) | set(allow)
     else:
         export_allowlist = None  # safe read-only default
+
+    risky = sorted({"shell_exec", "write_file"} & (export_allowlist or set()))
+    if risky and workspace is None:
+        raise click.UsageError(
+            f"Exporting {', '.join(risky)} requires an explicit --workspace DIR "
+            "(file writes are confined to it and shell commands start in it). "
+            "Refusing to start."
+        )
 
     with contextlib.suppress(KeyboardInterrupt):
         asyncio.run(serve_stdio(registry, name=name, export_allowlist=export_allowlist))
@@ -566,13 +592,15 @@ def research() -> None:
 
 @research.command("start")
 @click.option(
-    "--target", "-t",
+    "--target",
+    "-t",
     type=click.Choice(["code", "room-health"]),
     default="code",
     help="Research target: 'code' (improve src/) or 'room-health' (evolve the AV playbook)",
 )
 @click.option(
-    "--model", "-m",
+    "--model",
+    "-m",
     default="deepseek/deepseek-v3.2",
     help='Researcher model: OpenRouter slug, or "ollama/qwen2.5:14b" for fully local',
 )
@@ -583,7 +611,8 @@ def research() -> None:
     help="Max experiments to run (0 = infinite)",
 )
 @click.option(
-    "--project", "-p",
+    "--project",
+    "-p",
     default="default",
     help="Project ID for memory persistence (agent_memories)",
 )
@@ -708,7 +737,8 @@ def research_status() -> None:
     # Check if on an autoresearch branch
     result = sp.run(
         ["git", "branch", "--show-current"],
-        capture_output=True, text=True,
+        capture_output=True,
+        text=True,
     )
     branch = result.stdout.strip()
 
@@ -808,6 +838,7 @@ def skills_info(skill_name: str) -> None:
         console.print(f"  Required Tools: {', '.join(skill.required_tools)}")
     if skill.parameters:
         import json
+
         console.print(f"  Parameters: {json.dumps(skill.parameters, indent=2)}")
 
 
@@ -919,6 +950,7 @@ def projects_list() -> None:
         pool = await asyncpg.create_pool(settings.database.postgres_url, min_size=1, max_size=2)
         try:
             from silkroute.db.repositories.projects import list_projects
+
             rows = await list_projects(pool)
             return rows
         finally:
@@ -979,8 +1011,11 @@ def projects_create(
         pool = await asyncpg.create_pool(settings.database.postgres_url, min_size=1, max_size=2)
         try:
             from silkroute.db.repositories.projects import create_project
+
             return await create_project(
-                pool, project_id, name,
+                pool,
+                project_id,
+                name,
                 description=description,
                 github_repo=github_repo,
                 budget_monthly_usd=budget_monthly,
@@ -1015,6 +1050,7 @@ def projects_show(project_id: str) -> None:
         pool = await asyncpg.create_pool(settings.database.postgres_url, min_size=1, max_size=2)
         try:
             from silkroute.db.repositories.projects import get_project
+
             return await get_project(pool, project_id)
         finally:
             await pool.close()
@@ -1057,6 +1093,7 @@ def projects_delete(project_id: str) -> None:
         pool = await asyncpg.create_pool(settings.database.postgres_url, min_size=1, max_size=2)
         try:
             from silkroute.db.repositories.projects import delete_project
+
             return await delete_project(pool, project_id)
         finally:
             await pool.close()
@@ -1103,6 +1140,7 @@ def memory_list(project_id: str | None, kind: str | None, limit: int) -> None:
         pool = await asyncpg.create_pool(settings.database.postgres_url, min_size=1, max_size=2)
         try:
             from silkroute.db.repositories.memories import list_memories
+
             return await list_memories(pool, project_id=project_id, kind=kind, limit=limit)
         finally:
             await pool.close()
@@ -1148,7 +1186,11 @@ def memory_list(project_id: str | None, kind: str | None, limit: int) -> None:
 @click.option("--importance", type=float, default=0.5, help="0.0-1.0")
 @click.option("--global", "global_scope", is_flag=True, help="Store as a global memory")
 def memory_add(
-    content: str, kind: str, project_id: str, importance: float, global_scope: bool,
+    content: str,
+    kind: str,
+    project_id: str,
+    importance: float,
+    global_scope: bool,
 ) -> None:
     """Manually add a memory (useful for seeding demos)."""
     import asyncio
@@ -1163,6 +1205,7 @@ def memory_add(
         pool = await asyncpg.create_pool(settings.database.postgres_url, min_size=1, max_size=2)
         try:
             from silkroute.db.repositories.memories import insert_memory
+
             return await insert_memory(
                 pool,
                 content,
@@ -1197,6 +1240,7 @@ def memory_forget(memory_id: int) -> None:
         pool = await asyncpg.create_pool(settings.database.postgres_url, min_size=1, max_size=2)
         try:
             from silkroute.db.repositories.memories import delete_memory
+
             return await delete_memory(pool, memory_id)
         finally:
             await pool.close()
@@ -1236,6 +1280,7 @@ def db_status() -> None:
         pool = await asyncpg.create_pool(settings.database.postgres_url, min_size=1, max_size=2)
         try:
             from silkroute.db.migrations import list_pending_migrations
+
             return await list_pending_migrations(pool)
         finally:
             await pool.close()
@@ -1270,6 +1315,7 @@ def db_migrate() -> None:
         pool = await asyncpg.create_pool(settings.database.postgres_url, min_size=1, max_size=2)
         try:
             from silkroute.db.migrations import apply_migrations
+
             return await apply_migrations(pool)
         finally:
             await pool.close()

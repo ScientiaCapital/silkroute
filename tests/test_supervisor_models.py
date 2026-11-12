@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
-
 from silkroute.mantis.supervisor.models import (
     SessionStatus,
     StepStatus,
@@ -70,99 +68,123 @@ class TestSupervisorPlan:
         assert plan.overall_status == SessionStatus.COMPLETED
 
     def test_next_pending_step_returns_first(self):
-        plan = SupervisorPlan(steps=[
-            SupervisorStep(id="a", name="step1"),
-            SupervisorStep(id="b", name="step2"),
-        ])
+        plan = SupervisorPlan(
+            steps=[
+                SupervisorStep(id="a", name="step1"),
+                SupervisorStep(id="b", name="step2"),
+            ]
+        )
         step = plan.next_pending_step()
         assert step is not None
         assert step.id == "a"
 
     def test_next_pending_step_respects_depends_on(self):
-        plan = SupervisorPlan(steps=[
-            SupervisorStep(id="a", name="step1"),
-            SupervisorStep(id="b", name="step2", depends_on=["a"]),
-        ])
+        plan = SupervisorPlan(
+            steps=[
+                SupervisorStep(id="a", name="step1"),
+                SupervisorStep(id="b", name="step2", depends_on=["a"]),
+            ]
+        )
         # Step b depends on a, which is pending — only a is available
         step = plan.next_pending_step()
         assert step is not None
         assert step.id == "a"
 
     def test_next_pending_step_after_completion(self):
-        plan = SupervisorPlan(steps=[
-            SupervisorStep(id="a", name="step1", status=StepStatus.COMPLETED),
-            SupervisorStep(id="b", name="step2", depends_on=["a"]),
-        ])
+        plan = SupervisorPlan(
+            steps=[
+                SupervisorStep(id="a", name="step1", status=StepStatus.COMPLETED),
+                SupervisorStep(id="b", name="step2", depends_on=["a"]),
+            ]
+        )
         step = plan.next_pending_step()
         assert step is not None
         assert step.id == "b"
 
     def test_next_pending_step_none_when_all_complete(self):
-        plan = SupervisorPlan(steps=[
-            SupervisorStep(id="a", status=StepStatus.COMPLETED),
-            SupervisorStep(id="b", status=StepStatus.COMPLETED),
-        ])
+        plan = SupervisorPlan(
+            steps=[
+                SupervisorStep(id="a", status=StepStatus.COMPLETED),
+                SupervisorStep(id="b", status=StepStatus.COMPLETED),
+            ]
+        )
         assert plan.next_pending_step() is None
 
     def test_next_pending_step_unblocked_by_failed(self):
         """A step depending on a failed step should still be available."""
-        plan = SupervisorPlan(steps=[
-            SupervisorStep(id="a", status=StepStatus.FAILED),
-            SupervisorStep(id="b", depends_on=["a"]),
-        ])
+        plan = SupervisorPlan(
+            steps=[
+                SupervisorStep(id="a", status=StepStatus.FAILED),
+                SupervisorStep(id="b", depends_on=["a"]),
+            ]
+        )
         step = plan.next_pending_step()
         assert step is not None
         assert step.id == "b"
 
     def test_is_complete_all_terminal(self):
-        plan = SupervisorPlan(steps=[
-            SupervisorStep(id="a", status=StepStatus.COMPLETED),
-            SupervisorStep(id="b", status=StepStatus.SKIPPED),
-            SupervisorStep(id="c", status=StepStatus.FAILED),
-        ])
+        plan = SupervisorPlan(
+            steps=[
+                SupervisorStep(id="a", status=StepStatus.COMPLETED),
+                SupervisorStep(id="b", status=StepStatus.SKIPPED),
+                SupervisorStep(id="c", status=StepStatus.FAILED),
+            ]
+        )
         assert plan.is_complete is True
 
     def test_is_complete_not_all_terminal(self):
-        plan = SupervisorPlan(steps=[
-            SupervisorStep(id="a", status=StepStatus.COMPLETED),
-            SupervisorStep(id="b", status=StepStatus.PENDING),
-        ])
+        plan = SupervisorPlan(
+            steps=[
+                SupervisorStep(id="a", status=StepStatus.COMPLETED),
+                SupervisorStep(id="b", status=StepStatus.PENDING),
+            ]
+        )
         assert plan.is_complete is False
 
     def test_overall_status_pending(self):
-        plan = SupervisorPlan(steps=[
-            SupervisorStep(id="a", status=StepStatus.PENDING),
-            SupervisorStep(id="b", status=StepStatus.PENDING),
-        ])
+        plan = SupervisorPlan(
+            steps=[
+                SupervisorStep(id="a", status=StepStatus.PENDING),
+                SupervisorStep(id="b", status=StepStatus.PENDING),
+            ]
+        )
         assert plan.overall_status == SessionStatus.PENDING
 
     def test_overall_status_running(self):
-        plan = SupervisorPlan(steps=[
-            SupervisorStep(id="a", status=StepStatus.RUNNING),
-            SupervisorStep(id="b", status=StepStatus.PENDING),
-        ])
+        plan = SupervisorPlan(
+            steps=[
+                SupervisorStep(id="a", status=StepStatus.RUNNING),
+                SupervisorStep(id="b", status=StepStatus.PENDING),
+            ]
+        )
         assert plan.overall_status == SessionStatus.RUNNING
 
     def test_overall_status_completed(self):
-        plan = SupervisorPlan(steps=[
-            SupervisorStep(id="a", status=StepStatus.COMPLETED),
-            SupervisorStep(id="b", status=StepStatus.COMPLETED),
-        ])
+        plan = SupervisorPlan(
+            steps=[
+                SupervisorStep(id="a", status=StepStatus.COMPLETED),
+                SupervisorStep(id="b", status=StepStatus.COMPLETED),
+            ]
+        )
         assert plan.overall_status == SessionStatus.COMPLETED
 
     def test_overall_status_failed_all(self):
-        plan = SupervisorPlan(steps=[
-            SupervisorStep(id="a", status=StepStatus.FAILED),
-            SupervisorStep(id="b", status=StepStatus.SKIPPED),
-        ])
+        plan = SupervisorPlan(
+            steps=[
+                SupervisorStep(id="a", status=StepStatus.FAILED),
+                SupervisorStep(id="b", status=StepStatus.SKIPPED),
+            ]
+        )
         assert plan.overall_status == SessionStatus.FAILED
 
     def test_overall_status_mixed_returns_completed(self):
         """Mix of completed and failed steps = completed (best-effort)."""
-        plan = SupervisorPlan(steps=[
-            SupervisorStep(id="a", status=StepStatus.COMPLETED),
-            SupervisorStep(id="b", status=StepStatus.FAILED),
-        ])
+        plan = SupervisorPlan(
+            steps=[
+                SupervisorStep(id="a", status=StepStatus.COMPLETED),
+                SupervisorStep(id="b", status=StepStatus.FAILED),
+            ]
+        )
         assert plan.overall_status == SessionStatus.COMPLETED
 
 

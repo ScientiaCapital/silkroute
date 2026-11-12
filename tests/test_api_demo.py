@@ -84,7 +84,12 @@ class TestDemoStream:
         ]
         types = [f["type"] for f in frames]
         assert types == [
-            "session_start", "thought", "tool_call", "thought", "answer", "session_complete",
+            "session_start",
+            "thought",
+            "tool_call",
+            "thought",
+            "answer",
+            "session_complete",
         ]
 
 
@@ -118,7 +123,9 @@ def _mock_tool_call(tool_name: str, arguments: str):
     message.model_dump.return_value = {
         "role": "assistant",
         "content": "Let me check that.",
-        "tool_calls": [{"id": "call_test_123", "function": {"name": tool_name, "arguments": arguments}}],
+        "tool_calls": [
+            {"id": "call_test_123", "function": {"name": tool_name, "arguments": arguments}}
+        ],
     }
     choice = MagicMock()
     choice.message = message
@@ -169,6 +176,25 @@ class TestDemoStreamLive:
             for line in text.splitlines()
             if line.startswith("data: ") and not line.startswith("data: [")
         ]
+
+    @pytest.mark.parametrize(
+        "model",
+        ["deepseek/deepseek-v3.2", "openrouter/anthropic/claude-sonnet", "gpt-4o", "ollama"],
+    )
+    def test_live_refuses_non_local_models(self, app: TestClient, model: str) -> None:
+        """The demo is public and must spend no money: live runs are local Ollama only."""
+        with patch("silkroute.agent.loop.litellm") as mock_litellm:
+            mock_litellm.acompletion = AsyncMock()
+            resp = app.get(f"/demo/stream?live=true&delay=0&model={model}")
+
+        assert resp.status_code == 400
+        assert "ollama/" in resp.json()["detail"]
+        mock_litellm.acompletion.assert_not_called()
+
+    def test_replay_accepts_any_model_label(self, app: TestClient) -> None:
+        """The scripted replay never calls a model, so its model label is cosmetic."""
+        resp = app.get("/demo/stream?delay=0&model=deepseek/deepseek-v3.2")
+        assert resp.status_code == 200
 
     def test_live_happy_path(self, app: TestClient) -> None:
         tool_response = _mock_tool_call("get_recording_status", "{}")
@@ -246,7 +272,8 @@ class TestLiveDemoConcurrencyGuard:
             frames = [
                 chunk
                 async for chunk in demo_module._stream_live_trace(
-                    "test task", "ollama/qwen2.5:14b",
+                    "test task",
+                    "ollama/qwen2.5:14b",
                 )
             ]
         finally:
@@ -265,7 +292,8 @@ class TestEnsureMockMcpEnv:
     """
 
     def test_setdefault_leaves_existing_config_untouched(
-        self, monkeypatch: pytest.MonkeyPatch,
+        self,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         monkeypatch.setenv("SILKROUTE_MCP_EPIPHAN_COMMAND", "/usr/bin/real-epiphan-bridge")
 

@@ -51,17 +51,13 @@ class TestRollupDay:
         sql = mock_pool.execute.call_args[0][0]
         assert "FROM cost_logs" in sql
 
-    async def test_sql_contains_group_by_model_and_provider(
-        self, mock_pool: AsyncMock
-    ) -> None:
+    async def test_sql_contains_group_by_model_and_provider(self, mock_pool: AsyncMock) -> None:
         date = datetime.date(2026, 3, 1)
         await rollup_day(mock_pool, date)
         sql = mock_pool.execute.call_args[0][0]
         assert "GROUP BY project_id, model_id, provider" in sql
 
-    async def test_idempotent_upsert_updates_all_columns(
-        self, mock_pool: AsyncMock
-    ) -> None:
+    async def test_idempotent_upsert_updates_all_columns(self, mock_pool: AsyncMock) -> None:
         date = datetime.date(2026, 3, 1)
         await rollup_day(mock_pool, date)
         sql = mock_pool.execute.call_args[0][0]
@@ -103,9 +99,7 @@ class TestGetSnapshots:
         )
         assert result == []
 
-    async def test_passes_project_id_and_dates_as_params(
-        self, mock_pool: AsyncMock
-    ) -> None:
+    async def test_passes_project_id_and_dates_as_params(self, mock_pool: AsyncMock) -> None:
         mock_pool.fetch.return_value = []
         start = datetime.date(2026, 2, 1)
         end = datetime.date(2026, 2, 28)

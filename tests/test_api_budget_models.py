@@ -57,9 +57,7 @@ class TestBudgetModelsRoute:
             "silkroute.db.repositories.model_cost_snapshots.get_snapshots",
             new=AsyncMock(return_value=[]),
         ):
-            response = app.get(
-                "/budget/models?project_id=test-proj", headers=AUTH
-            )
+            response = app.get("/budget/models?project_id=test-proj", headers=AUTH)
         assert response.status_code == 200
         # If shadowed by /budget/{project_id}, the response would be a
         # ProjectBudgetResponse shape (has "monthly_spent_usd"), not our
@@ -86,9 +84,7 @@ class TestBudgetModelsRoute:
             "silkroute.db.repositories.model_cost_snapshots.get_snapshots",
             new=AsyncMock(return_value=[fake_row]),
         ):
-            response = app.get(
-                "/budget/models?project_id=test-proj", headers=AUTH
-            )
+            response = app.get("/budget/models?project_id=test-proj", headers=AUTH)
         assert response.status_code == 200
         body = response.json()
         assert body["count"] == 1
@@ -99,8 +95,6 @@ class TestBudgetModelsRoute:
             "silkroute.db.repositories.model_cost_snapshots.get_snapshots",
             new=AsyncMock(side_effect=RuntimeError("db down")),
         ):
-            response = app.get(
-                "/budget/models?project_id=test-proj", headers=AUTH
-            )
+            response = app.get("/budget/models?project_id=test-proj", headers=AUTH)
         assert response.status_code == 200
         assert response.json() == {"snapshots": [], "count": 0}

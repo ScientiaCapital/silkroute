@@ -1,4 +1,5 @@
 """Tests for silkroute.providers.models."""
+
 from silkroute.config.settings import ModelTier
 from silkroute.providers.models import (
     ALL_MODELS,
@@ -16,13 +17,16 @@ class TestModelRegistry:
 
     def test_tier_distribution(self):
         assert len(MODELS_BY_TIER[ModelTier.FREE]) == 9  # 3 API + 6 local
-        assert len(MODELS_BY_TIER[ModelTier.STANDARD]) == 7  # 4 Chinese + 3 western (incl. Haiku 4.5)
+        assert (
+            len(MODELS_BY_TIER[ModelTier.STANDARD]) == 7
+        )  # 4 Chinese + 3 western (incl. Haiku 4.5)
         assert len(MODELS_BY_TIER[ModelTier.PREMIUM]) == 6  # 4 Chinese + 2 western
 
     def test_free_models_are_free(self):
         for model in MODELS_BY_TIER[ModelTier.FREE]:
             assert model.is_free is True
             assert model.input_cost_per_m == 0.0
+
 
 class TestGetModel:
     def test_get_existing_model(self):
@@ -33,6 +37,7 @@ class TestGetModel:
 
     def test_get_nonexistent_model(self):
         assert get_model("nonexistent/model") is None
+
 
 class TestCostEstimation:
     def test_free_model_zero_cost(self):
@@ -45,6 +50,7 @@ class TestCostEstimation:
         cost = estimate_cost(model, input_tokens=1_000_000, output_tokens=1_000_000)
         expected = 0.25 + 0.38  # $0.25/M input + $0.38/M output
         assert abs(cost - expected) < 0.001
+
 
 class TestGetCheapest:
     def test_cheapest_standard(self):

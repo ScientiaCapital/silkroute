@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock
 
 import fakeredis.aioredis
 import pytest
@@ -60,7 +60,12 @@ class TestCreateProject:
         mock_db_pool.fetchrow.return_value = SAMPLE_PROJECT
         resp = app.post(
             "/projects",
-            json={"id": "test-proj", "name": "Test Project", "description": "A test", "github_repo": "org/repo"},
+            json={
+                "id": "test-proj",
+                "name": "Test Project",
+                "description": "A test",
+                "github_repo": "org/repo",
+            },
             headers=AUTH,
         )
         assert resp.status_code == 201
@@ -70,6 +75,7 @@ class TestCreateProject:
 
     def test_create_duplicate_returns_409(self, app: TestClient, mock_db_pool: AsyncMock) -> None:
         import asyncpg
+
         mock_db_pool.fetchrow.side_effect = asyncpg.UniqueViolationError("")
         resp = app.post(
             "/projects",
@@ -189,6 +195,7 @@ class TestDeleteProject:
 
     def test_delete_fk_violation(self, app: TestClient, mock_db_pool: AsyncMock) -> None:
         import asyncpg
+
         mock_db_pool.execute.side_effect = asyncpg.ForeignKeyViolationError("")
         resp = app.delete("/projects/has-costs", headers=AUTH)
         assert resp.status_code == 409

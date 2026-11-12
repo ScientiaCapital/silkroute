@@ -39,3 +39,14 @@ silkroute_redis/
 .playwright-mcp/
 .silkroute/
 .coverage
+
+# Local agent session files (kept out of the public tree)
+.claude/archive/
+.claude/OBSERVER_*
+.claude/observers/
+.claude/TASK.md
+.claude/PLANNING.md
+.claude/Backlog.md
+.claude/PROJECT_CONTEXT.md
+.venv-da/
+.venv-ci/

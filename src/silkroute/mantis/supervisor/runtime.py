@@ -90,11 +90,13 @@ class SupervisorRuntime:
 
         tracker = BudgetTracker(total_usd=plan.total_budget_usd)
 
-        yield json.dumps({
-            "type": "supervisor_start",
-            "session_id": session.id,
-            "step_count": len(plan.steps),
-        })
+        yield json.dumps(
+            {
+                "type": "supervisor_start",
+                "session_id": session.id,
+                "step_count": len(plan.steps),
+            }
+        )
 
         while not plan.is_complete:
             step = plan.next_pending_step()
@@ -105,41 +107,51 @@ class SupervisorRuntime:
                 step.condition, ctx_mgr.to_legacy_dict()
             ):
                 step.status = StepStatus.SKIPPED
-                yield json.dumps({
-                    "type": "step_skipped",
-                    "step_id": step.id,
-                    "reason": f"Condition not met: {step.condition}",
-                })
+                yield json.dumps(
+                    {
+                        "type": "step_skipped",
+                        "step_id": step.id,
+                        "reason": f"Condition not met: {step.condition}",
+                    }
+                )
                 continue
 
-            yield json.dumps({
-                "type": "step_start",
-                "step_id": step.id,
-                "step_name": step.name,
-            })
+            yield json.dumps(
+                {
+                    "type": "step_start",
+                    "step_id": step.id,
+                    "step_name": step.name,
+                }
+            )
 
             try:
                 await self._execute_step(step, session, tracker, ctx_mgr)
-                yield json.dumps({
-                    "type": "step_completed",
-                    "step_id": step.id,
-                    "status": step.status.value,
-                    "cost_usd": step.cost_usd,
-                    "output": step.output[:500],
-                })
+                yield json.dumps(
+                    {
+                        "type": "step_completed",
+                        "step_id": step.id,
+                        "status": step.status.value,
+                        "cost_usd": step.cost_usd,
+                        "output": step.output[:500],
+                    }
+                )
             except BudgetExhaustedError:
-                yield json.dumps({
-                    "type": "budget_exhausted",
-                    "step_id": step.id,
-                })
+                yield json.dumps(
+                    {
+                        "type": "budget_exhausted",
+                        "step_id": step.id,
+                    }
+                )
                 break
 
-        yield json.dumps({
-            "type": "supervisor_complete",
-            "session_id": session.id,
-            "total_cost_usd": tracker.spent_usd,
-            "status": plan.overall_status.value,
-        })
+        yield json.dumps(
+            {
+                "type": "supervisor_complete",
+                "session_id": session.id,
+                "total_cost_usd": tracker.spent_usd,
+                "status": plan.overall_status.value,
+            }
+        )
 
     async def create_session(
         self,
@@ -226,7 +238,9 @@ class SupervisorRuntime:
                 from silkroute.config.settings import MemoryConfig
 
                 memories = await recall_for_session(
-                    self._db_pool, config.project_id, MemoryConfig(),
+                    self._db_pool,
+                    config.project_id,
+                    MemoryConfig(),
                 )
                 memory_block = format_memory_block(memories)
                 if memory_block:
@@ -369,7 +383,7 @@ class SupervisorRuntime:
 
             if result.status in ("failed", "timeout") and attempt < max_retries:
                 step.retry_count = attempt + 1
-                delay = backoff * (2 ** attempt)
+                delay = backoff * (2**attempt)
                 log.info(
                     "supervisor_step_retry",
                     step_id=step.id,
@@ -499,9 +513,7 @@ class SupervisorRuntime:
         try:
             from silkroute.db.repositories.supervisor import update_checkpoint
 
-            await update_checkpoint(
-                self._db_pool, session.id, checkpoint, tracker.spent_usd
-            )
+            await update_checkpoint(self._db_pool, session.id, checkpoint, tracker.spent_usd)
         except (OSError, RuntimeError, ValueError) as exc:
             log.warning(
                 "supervisor_checkpoint_failed",
@@ -550,10 +562,12 @@ class SupervisorRuntime:
                 steps.append(step)
                 prev_id = step.id
         else:
-            steps.append(SupervisorStep(
-                name="step_1",
-                description=task,
-            ))
+            steps.append(
+                SupervisorStep(
+                    name="step_1",
+                    description=task,
+                )
+            )
 
         return SupervisorPlan(
             project_id=config.project_id,

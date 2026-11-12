@@ -87,9 +87,7 @@ class TestRuntimeStream:
     """GET /runtime/stream (SSE)."""
 
     def test_stream_returns_event_stream(self, app: TestClient) -> None:
-        async def mock_stream(
-            task: str, config: str | None = None
-        ) -> AsyncGenerator[str, None]:
+        async def mock_stream(task: str, config: str | None = None) -> AsyncGenerator[str, None]:
             yield "chunk1"
             yield "chunk2"
 

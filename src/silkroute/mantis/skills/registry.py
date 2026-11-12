@@ -121,10 +121,12 @@ class SkillRegistry:
                     log.error("mounted_skill_error", skill=_s.name, error=str(e), exc_info=True)
                     return f"Error in skill '{_s.name}': {e}"
 
-            tool_registry.register(ToolSpec(
-                name=skill.name,
-                description=skill.description,
-                parameters=skill.parameters,
-                handler=_wrapped_handler,
-            ))
+            tool_registry.register(
+                ToolSpec(
+                    name=skill.name,
+                    description=skill.description,
+                    parameters=skill.parameters,
+                    handler=_wrapped_handler,
+                )
+            )
             log.debug("skill_mounted", name=skill.name)

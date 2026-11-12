@@ -33,7 +33,9 @@ def sample_session() -> AgentSession:
     return session
 
 
-async def test_create_session_executes_insert(mock_pool: AsyncMock, sample_session: AgentSession) -> None:
+async def test_create_session_executes_insert(
+    mock_pool: AsyncMock, sample_session: AgentSession
+) -> None:
     """create_session inserts a row into agent_sessions."""
     await create_session(mock_pool, sample_session)
 
@@ -42,7 +44,9 @@ async def test_create_session_executes_insert(mock_pool: AsyncMock, sample_sessi
     assert "INSERT INTO agent_sessions" in sql
 
 
-async def test_create_session_passes_correct_values(mock_pool: AsyncMock, sample_session: AgentSession) -> None:
+async def test_create_session_passes_correct_values(
+    mock_pool: AsyncMock, sample_session: AgentSession
+) -> None:
     """create_session passes all session fields as parameters."""
     await create_session(mock_pool, sample_session)
 
@@ -54,9 +58,13 @@ async def test_create_session_passes_correct_values(mock_pool: AsyncMock, sample
     assert args[5] == sample_session.model_id
 
 
-async def test_update_session_executes_update(mock_pool: AsyncMock, sample_session: AgentSession) -> None:
+async def test_update_session_executes_update(
+    mock_pool: AsyncMock, sample_session: AgentSession
+) -> None:
     """update_session updates iteration count and cost."""
-    sample_session.add_iteration(Iteration(number=1, cost_usd=0.01, input_tokens=100, output_tokens=50))
+    sample_session.add_iteration(
+        Iteration(number=1, cost_usd=0.01, input_tokens=100, output_tokens=50)
+    )
 
     await update_session(mock_pool, sample_session)
 
@@ -69,7 +77,9 @@ async def test_update_session_executes_update(mock_pool: AsyncMock, sample_sessi
     assert args[2] == 1  # iteration_count
 
 
-async def test_close_session_sets_terminal_status(mock_pool: AsyncMock, sample_session: AgentSession) -> None:
+async def test_close_session_sets_terminal_status(
+    mock_pool: AsyncMock, sample_session: AgentSession
+) -> None:
     """close_session updates status and completed_at."""
     sample_session.complete(SessionStatus.COMPLETED)
 
@@ -80,7 +90,9 @@ async def test_close_session_sets_terminal_status(mock_pool: AsyncMock, sample_s
     assert args[2] == "completed"  # DB status value
 
 
-async def test_close_session_budget_exceeded_maps_to_failed(mock_pool: AsyncMock, sample_session: AgentSession) -> None:
+async def test_close_session_budget_exceeded_maps_to_failed(
+    mock_pool: AsyncMock, sample_session: AgentSession
+) -> None:
     """BUDGET_EXCEEDED maps to 'failed' in the DB."""
     sample_session.complete(SessionStatus.BUDGET_EXCEEDED)
 
@@ -103,7 +115,9 @@ def test_status_mapping_only_uses_valid_db_values() -> None:
         assert db_value in valid_db_values, f"{status} maps to invalid DB value: {db_value}"
 
 
-async def test_create_session_serializes_messages_as_json(mock_pool: AsyncMock, sample_session: AgentSession) -> None:
+async def test_create_session_serializes_messages_as_json(
+    mock_pool: AsyncMock, sample_session: AgentSession
+) -> None:
     """messages_json parameter should be a JSON string."""
     sample_session.messages = [{"role": "system", "content": "test"}]
 

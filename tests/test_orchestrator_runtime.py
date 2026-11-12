@@ -94,9 +94,7 @@ class TestOrchestratorRuntime:
             max_sub_tasks=2,
         )
 
-        result = await runtime.invoke(
-            "1. review code 2. write tests 3. deploy 4. notify"
-        )
+        result = await runtime.invoke("1. review code 2. write tests 3. deploy 4. notify")
 
         # Should only execute 2 sub-tasks despite 4 being decomposed
         assert result.metadata["sub_task_count"] == 2
@@ -133,6 +131,7 @@ class TestOrchestratorRuntime:
     @pytest.mark.asyncio
     async def test_child_exception_captured(self):
         """Child runtime exception should be captured, not propagated."""
+
         def factory(rt=None):
             mock = AsyncMock()
             mock.name = "mock"

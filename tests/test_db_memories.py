@@ -46,7 +46,8 @@ class TestInsertMemory:
         long_content = "x" * 5000
         await insert_memory(mock_pool, long_content)
         args = mock_pool.fetchrow.call_args[0]
-        # positional args: (sql, project_id, kind, content, importance, source_session_id, token_estimate)
+        # positional args: (sql, project_id, kind, content, importance,
+        #                   source_session_id, token_estimate)
         content_arg = args[3]
         assert len(content_arg) == 500
 

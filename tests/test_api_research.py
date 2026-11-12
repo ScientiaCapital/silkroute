@@ -36,17 +36,26 @@ AUTH = {"Authorization": "Bearer test-secret"}
 
 class TestGetLedgerRoute:
     def test_returns_available_false_when_no_ledger_file(
-        self, app: TestClient, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+        self,
+        app: TestClient,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         monkeypatch.chdir(tmp_path)
         response = app.get("/research/ledger", headers=AUTH)
         assert response.status_code == 200
         assert response.json() == {
-            "entries": [], "counts": {}, "best": None, "available": False,
+            "entries": [],
+            "counts": {},
+            "best": None,
+            "available": False,
         }
 
     def test_returns_entries_counts_and_best(
-        self, app: TestClient, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+        self,
+        app: TestClient,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         monkeypatch.chdir(tmp_path)
         ledger = Ledger(tmp_path / ".silkroute" / "autoresearch" / "results.tsv")

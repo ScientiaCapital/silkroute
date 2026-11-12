@@ -81,8 +81,7 @@ class BudgetMiddleware:
         reserved = await self._tracker.try_reserve(ctx.sub_task.budget_usd)
         if not reserved:
             raise BudgetExhaustedError(
-                f"Budget exhausted: ${self._tracker.spent_usd:.4f} / "
-                f"${self._tracker.total_usd:.4f}"
+                f"Budget exhausted: ${self._tracker.spent_usd:.4f} / ${self._tracker.total_usd:.4f}"
             )
         ctx.budget_remaining_usd = self._tracker.remaining_usd
         return ctx
@@ -166,11 +165,13 @@ class CheckpointMiddleware:
         return ctx
 
     async def after(self, ctx: MiddlewareContext, result: AgentResult) -> AgentResult:
-        self._results.append({
-            "sub_task_id": ctx.sub_task.id,
-            "status": result.status,
-            "cost_usd": result.cost_usd,
-        })
+        self._results.append(
+            {
+                "sub_task_id": ctx.sub_task.id,
+                "status": result.status,
+                "cost_usd": result.cost_usd,
+            }
+        )
         if self._pool is not None:
             asyncio.create_task(self._persist(ctx, result))
         return result
@@ -242,7 +243,9 @@ class AlertMiddleware:
                     total_usd=self._total_budget,
                     pct=round(pct * 100, 1),
                 )
-            elif pct >= self._thresholds.budget_warn_pct and "budget_warn" not in self._alerts_fired:  # noqa: E501
+            elif (
+                pct >= self._thresholds.budget_warn_pct and "budget_warn" not in self._alerts_fired
+            ):  # noqa: E501
                 self._alerts_fired.add("budget_warn")
                 log.warning(
                     "alert_budget_warning",

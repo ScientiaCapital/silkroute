@@ -53,9 +53,7 @@ class TestCreateCodeWriter:
         mock_model: MagicMock,
     ) -> None:
         create_code_writer(model_id="deepseek/deepseek-v3.2", api_key="sk-test")
-        mock_model.assert_called_once_with(
-            model_id="deepseek/deepseek-v3.2", api_key="sk-test"
-        )
+        mock_model.assert_called_once_with(model_id="deepseek/deepseek-v3.2", api_key="sk-test")
 
     @patch("silkroute.providers.openrouter.create_openrouter_model")
     @patch("deepagents.backends.LocalShellBackend")

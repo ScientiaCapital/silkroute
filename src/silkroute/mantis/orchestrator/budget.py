@@ -59,7 +59,7 @@ class BudgetTracker:
         Called after a sub-task completes to adjust for over-reservation.
         """
         async with self._lock:
-            self._spent_usd -= (reserved - actual)
+            self._spent_usd -= reserved - actual
 
 
 # Tier weights for proportional budget allocation

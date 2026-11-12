@@ -50,9 +50,11 @@ class TestDaemonServer:
     ) -> None:
         server = await _make_server_with_queue(tmp_path, fake_redis)
 
-        response = await server._handle_submit({
-            "task": {"task": "review code", "project_id": "myproject"},
-        })
+        response = await server._handle_submit(
+            {
+                "task": {"task": "review code", "project_id": "myproject"},
+            }
+        )
 
         assert response["ok"] is True
         assert "id" in response
@@ -64,9 +66,11 @@ class TestDaemonServer:
     ) -> None:
         server = await _make_server_with_queue(tmp_path, fake_redis)
 
-        response = await server._handle_submit({
-            "task": "just a string task",
-        })
+        response = await server._handle_submit(
+            {
+                "task": "just a string task",
+            }
+        )
 
         assert response["ok"] is True
 
@@ -221,16 +225,18 @@ class TestDaemonServer:
     ) -> None:
         server = await _make_server_with_queue(tmp_path, fake_redis)
 
-        response = await server._handle_submit({
-            "task": {
-                "task": "complex analysis",
-                "project_id": "proj-1",
-                "model_override": "deepseek/deepseek-r1-0528",
-                "tier_override": "premium",
-                "max_iterations": 50,
-                "budget_limit_usd": 25.0,
-            },
-        })
+        response = await server._handle_submit(
+            {
+                "task": {
+                    "task": "complex analysis",
+                    "project_id": "proj-1",
+                    "model_override": "deepseek/deepseek-r1-0528",
+                    "tier_override": "premium",
+                    "max_iterations": 50,
+                    "budget_limit_usd": 25.0,
+                },
+            }
+        )
 
         assert response["ok"] is True
         # Verify request was created with correct params

@@ -51,8 +51,7 @@ class TestHeartbeatTicker:
 
         # Filter for heartbeat calls (not start/stop)
         heartbeat_calls = [
-            c for c in mock_log.info.call_args_list
-            if c.args and c.args[0] == "heartbeat"
+            c for c in mock_log.info.call_args_list if c.args and c.args[0] == "heartbeat"
         ]
         assert len(heartbeat_calls) >= 1
 
@@ -69,8 +68,7 @@ class TestHeartbeatTicker:
             await ticker.stop()
 
         heartbeat_calls = [
-            c for c in mock_log.info.call_args_list
-            if c.args and c.args[0] == "heartbeat"
+            c for c in mock_log.info.call_args_list if c.args and c.args[0] == "heartbeat"
         ]
         assert len(heartbeat_calls) >= 1
 
@@ -83,9 +81,7 @@ class TestHeartbeatTicker:
         assert "rss_mb" in kwargs
 
     @pytest.mark.asyncio
-    async def test_active_workers_fn_called(
-        self, fake_redis: fakeredis.aioredis.FakeRedis
-    ) -> None:
+    async def test_active_workers_fn_called(self, fake_redis: fakeredis.aioredis.FakeRedis) -> None:
         q = TaskQueue(redis=fake_redis)
         ticker = HeartbeatTicker(
             interval=0.05,
@@ -99,8 +95,7 @@ class TestHeartbeatTicker:
             await ticker.stop()
 
         heartbeat_calls = [
-            c for c in mock_log.info.call_args_list
-            if c.args and c.args[0] == "heartbeat"
+            c for c in mock_log.info.call_args_list if c.args and c.args[0] == "heartbeat"
         ]
         assert len(heartbeat_calls) >= 1
         assert heartbeat_calls[0].kwargs["active_workers"] == 2

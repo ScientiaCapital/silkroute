@@ -2,15 +2,13 @@
 
 from __future__ import annotations
 
-from collections import OrderedDict
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from silkroute.mantis.orchestrator.llm_decomposer import LLMDecomposer
-from silkroute.mantis.orchestrator.models import OrchestrationPlan, SubTask
+from silkroute.mantis.orchestrator.models import OrchestrationPlan
 from silkroute.mantis.runtime.interface import RuntimeConfig
-
 
 # ============================================================================
 # Helpers
@@ -49,7 +47,10 @@ class TestParseResponse:
     def test_parse_valid_json_single_task(self):
         decomp = LLMDecomposer()
         cfg = RuntimeConfig()
-        content = '{"sub_tasks": [{"description": "Write hello world", "tier_hint": "free", "depends_on": []}]}'
+        content = (
+            '{"sub_tasks": [{"description": "Write hello world", '
+            '"tier_hint": "free", "depends_on": []}]}'
+        )
         plan = decomp._parse_response(content, "Write hello world", cfg)
 
         assert isinstance(plan, OrchestrationPlan)
@@ -61,7 +62,12 @@ class TestParseResponse:
     def test_parse_valid_json_multiple_tasks(self):
         decomp = LLMDecomposer()
         cfg = RuntimeConfig()
-        content = '{"sub_tasks": [{"description": "Task A", "tier_hint": "standard", "depends_on": []}, {"description": "Task B", "tier_hint": "premium", "depends_on": [0]}]}'
+        content = (
+            '{"sub_tasks": ['
+            '{"description": "Task A", "tier_hint": "standard", "depends_on": []}, '
+            '{"description": "Task B", "tier_hint": "premium", "depends_on": [0]}'
+            "]}"
+        )
         plan = decomp._parse_response(content, "Do Task A and then Task B", cfg)
 
         assert len(plan.sub_tasks) == 2
@@ -76,7 +82,8 @@ class TestParseResponse:
         content = (
             "Here is the decomposition:\n"
             "```json\n"
-            '{"sub_tasks": [{"description": "Fenced task", "tier_hint": "free", "depends_on": []}]}\n'
+            '{"sub_tasks": [{"description": "Fenced task", '
+            '"tier_hint": "free", "depends_on": []}]}\n'
             "```"
         )
         plan = decomp._parse_response(content, "Fenced task", cfg)
@@ -105,8 +112,7 @@ class TestParseResponse:
         decomp = LLMDecomposer()
         cfg = RuntimeConfig()
         sub_tasks = [
-            {"description": f"Task {i}", "tier_hint": "free", "depends_on": []}
-            for i in range(8)
+            {"description": f"Task {i}", "tier_hint": "free", "depends_on": []} for i in range(8)
         ]
         import json
 
@@ -139,9 +145,11 @@ class TestLLMDecomposerCache:
 
         def factory(model_id: str) -> AsyncMock:
             llm = AsyncMock()
-            llm.ainvoke = AsyncMock(return_value=_make_llm_response([
-                {"description": "Do something", "tier_hint": "free", "depends_on": []}
-            ]))
+            llm.ainvoke = AsyncMock(
+                return_value=_make_llm_response(
+                    [{"description": "Do something", "tier_hint": "free", "depends_on": []}]
+                )
+            )
             factory_calls.append(model_id)
             return llm
 
@@ -165,9 +173,11 @@ class TestLLMDecomposerCache:
             nonlocal call_count
             call_count += 1
             llm = AsyncMock()
-            llm.ainvoke = AsyncMock(return_value=_make_llm_response([
-                {"description": f"Task {call_count}", "tier_hint": "free", "depends_on": []}
-            ]))
+            llm.ainvoke = AsyncMock(
+                return_value=_make_llm_response(
+                    [{"description": f"Task {call_count}", "tier_hint": "free", "depends_on": []}]
+                )
+            )
             return llm
 
         decomp = LLMDecomposer(llm_factory=factory, cache_maxsize=3)
@@ -203,6 +213,7 @@ class TestLLMDecomposerCache:
 class TestLLMDecomposerFallback:
     def test_fallback_on_network_error(self):
         """If LLM raises any exception, KeywordDecomposer is used instead."""
+
         def factory(model_id: str) -> AsyncMock:
             llm = AsyncMock()
             llm.ainvoke = AsyncMock(side_effect=ConnectionError("network down"))
@@ -217,6 +228,7 @@ class TestLLMDecomposerFallback:
 
     def test_fallback_on_invalid_response(self):
         """If LLM returns unparseable content, fallback is used."""
+
         def factory(model_id: str) -> AsyncMock:
             llm = AsyncMock()
             mock_resp = MagicMock()
@@ -239,11 +251,14 @@ class TestLLMDecomposerFallback:
 class TestLLMDecomposerDecompose:
     def test_decompose_single_task(self):
         """Simple task returns a single-element plan."""
+
         def factory(model_id: str) -> AsyncMock:
             llm = AsyncMock()
-            llm.ainvoke = AsyncMock(return_value=_make_llm_response([
-                {"description": "List all files", "tier_hint": "free", "depends_on": []}
-            ]))
+            llm.ainvoke = AsyncMock(
+                return_value=_make_llm_response(
+                    [{"description": "List all files", "tier_hint": "free", "depends_on": []}]
+                )
+            )
             return llm
 
         decomp = LLMDecomposer(llm_factory=factory)
@@ -255,12 +270,21 @@ class TestLLMDecomposerDecompose:
 
     def test_decompose_compound_task(self):
         """Compound task returns multi-step plan."""
+
         def factory(model_id: str) -> AsyncMock:
             llm = AsyncMock()
-            llm.ainvoke = AsyncMock(return_value=_make_llm_response([
-                {"description": "Analyze codebase", "tier_hint": "premium", "depends_on": []},
-                {"description": "Write report", "tier_hint": "standard", "depends_on": [0]},
-            ]))
+            llm.ainvoke = AsyncMock(
+                return_value=_make_llm_response(
+                    [
+                        {
+                            "description": "Analyze codebase",
+                            "tier_hint": "premium",
+                            "depends_on": [],
+                        },
+                        {"description": "Write report", "tier_hint": "standard", "depends_on": [0]},
+                    ]
+                )
+            )
             return llm
 
         decomp = LLMDecomposer(llm_factory=factory)
@@ -278,9 +302,11 @@ class TestLLMDecomposerDecompose:
         so we patch at the source module (silkroute.providers.openrouter).
         """
         mock_llm = AsyncMock()
-        mock_llm.ainvoke = AsyncMock(return_value=_make_llm_response([
-            {"description": "Do something", "tier_hint": "free", "depends_on": []}
-        ]))
+        mock_llm.ainvoke = AsyncMock(
+            return_value=_make_llm_response(
+                [{"description": "Do something", "tier_hint": "free", "depends_on": []}]
+            )
+        )
 
         with patch(
             "silkroute.mantis.orchestrator.llm_decomposer.create_openrouter_model",
@@ -294,11 +320,14 @@ class TestLLMDecomposerDecompose:
 
     def test_decompose_uses_runtime_config(self):
         """RuntimeConfig budget is propagated to the plan."""
+
         def factory(model_id: str) -> AsyncMock:
             llm = AsyncMock()
-            llm.ainvoke = AsyncMock(return_value=_make_llm_response([
-                {"description": "Task", "tier_hint": "standard", "depends_on": []}
-            ]))
+            llm.ainvoke = AsyncMock(
+                return_value=_make_llm_response(
+                    [{"description": "Task", "tier_hint": "standard", "depends_on": []}]
+                )
+            )
             return llm
 
         decomp = LLMDecomposer(llm_factory=factory)

@@ -55,12 +55,12 @@ class HealResult:
     """Outcome of one detect → fix → verify cycle."""
 
     before: dict[str, Any]
-    fault_type: str | None          # None = room was already healthy
-    action: str                     # remediation the playbook chose ("none" if unhandled)
+    fault_type: str | None  # None = room was already healthy
+    action: str  # remediation the playbook chose ("none" if unhandled)
     tool_called: bool
     after: dict[str, Any] | None
-    verified: bool                  # room healthy after the action
-    outcome: str                    # "healed" | "unhandled" | "healthy"
+    verified: bool  # room healthy after the action
+    outcome: str  # "healed" | "unhandled" | "healthy"
     steps: list[str] = field(default_factory=list)
 
 

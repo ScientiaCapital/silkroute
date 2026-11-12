@@ -82,14 +82,17 @@ async def run_agent(
     tier = ModelTier(tier_override) if tier_override else classification.tier
 
     if not daemon_mode:
-        console.print(Panel(
-            f"[bold]{task}[/bold]\n\n"
-            f"Tier: [cyan]{tier.value}[/cyan]  "
-            f"Capabilities: [dim]{', '.join(c.value for c in classification.capabilities)}[/dim]\n"
-            f"Reason: [dim]{classification.reason}[/dim]",
-            title="[bold blue]SilkRoute Agent[/bold blue]",
-            border_style="blue",
-        ))
+        console.print(
+            Panel(
+                f"[bold]{task}[/bold]\n\n"
+                f"Tier: [cyan]{tier.value}[/cyan]  "
+                "Capabilities: "
+                f"[dim]{', '.join(c.value for c in classification.capabilities)}[/dim]\n"
+                f"Reason: [dim]{classification.reason}[/dim]",
+                title="[bold blue]SilkRoute Agent[/bold blue]",
+                border_style="blue",
+            )
+        )
     else:
         log.info("agent_started", task=task[:200], tier=tier.value)
 
@@ -102,7 +105,10 @@ async def run_agent(
     if hardware_profile is None:
         hardware_profile = DeploymentConfig().hardware_profile
     model = select_model(
-        tier, classification.capabilities, model_override, hardware_profile,
+        tier,
+        classification.capabilities,
+        model_override,
+        hardware_profile,
     )
     model_string = get_litellm_model_string(model)
 
@@ -197,9 +203,11 @@ async def run_agent(
     if recalled_memories and pool is not None:
         from silkroute.db.repositories.memories import mark_recalled
 
-        pending_db_tasks.append(asyncio.create_task(
-            mark_recalled(pool, [m["id"] for m in recalled_memories]),
-        ))
+        pending_db_tasks.append(
+            asyncio.create_task(
+                mark_recalled(pool, [m["id"] for m in recalled_memories]),
+            )
+        )
 
     # Step 4: Set up tools and system prompt (sandbox shell to workspace)
     registry = create_default_registry(workspace_dir=workspace_dir)
@@ -270,9 +278,14 @@ async def run_agent(
             else:
                 log.warning("budget_exceeded", session_id=session.id, warning=budget_check.warning)
             session.complete(SessionStatus.BUDGET_EXCEEDED)
-            _push_stream_event(stream_queue, "budget_exceeded", {
-                "iteration": i, "warning": budget_check.warning,
-            })
+            _push_stream_event(
+                stream_queue,
+                "budget_exceeded",
+                {
+                    "iteration": i,
+                    "warning": budget_check.warning,
+                },
+            )
             break
         if budget_check.warning:
             if not daemon_mode:
@@ -308,9 +321,14 @@ async def run_agent(
             if not daemon_mode:
                 console.print(f"  [red]LLM error: {e}[/red]")
             session.complete(SessionStatus.FAILED)
-            _push_stream_event(stream_queue, "error", {
-                "iteration": i, "error": str(e),
-            })
+            _push_stream_event(
+                stream_queue,
+                "error",
+                {
+                    "iteration": i,
+                    "error": str(e),
+                },
+            )
             break
 
         latency_ms = _now_ms() - start_ms
@@ -344,11 +362,15 @@ async def run_agent(
             _schedule_db_writes(pool, pending_db_tasks, session, iteration, model)
             messages.append({"role": "assistant", "content": thought})
             session.complete(SessionStatus.COMPLETED)
-            _push_stream_event(stream_queue, "completed", {
-                "iteration": i,
-                "output": thought[:500],
-                "cost_usd": session.total_cost_usd,
-            })
+            _push_stream_event(
+                stream_queue,
+                "completed",
+                {
+                    "iteration": i,
+                    "output": thought[:500],
+                    "cost_usd": session.total_cost_usd,
+                },
+            )
             if not daemon_mode:
                 console.print("\n  [bold green]Task completed.[/bold green]")
             break
@@ -376,32 +398,40 @@ async def run_agent(
                 trimmed_result = result[:150] + ("..." if len(result) > 150 else "")
                 console.print(f"    [{style}]→ {trimmed_result}[/{style}]")
 
-            tool_call_records.append(ToolCall(
-                tool_name=tool_name,
-                tool_input=args,
-                tool_output=result,
-                success=success,
-                error_message=result if not success else "",
-                duration_ms=tc_duration,
-            ))
+            tool_call_records.append(
+                ToolCall(
+                    tool_name=tool_name,
+                    tool_input=args,
+                    tool_output=result,
+                    success=success,
+                    error_message=result if not success else "",
+                    duration_ms=tc_duration,
+                )
+            )
 
             # Append tool result message
-            messages.append({
-                "role": "tool",
-                "tool_call_id": tc.id,
-                "content": result,
-            })
+            messages.append(
+                {
+                    "role": "tool",
+                    "tool_call_id": tc.id,
+                    "content": result,
+                }
+            )
 
         iteration.tool_calls = tool_call_records
         session.add_iteration(iteration)
         _schedule_db_writes(pool, pending_db_tasks, session, iteration, model)
 
-        _push_stream_event(stream_queue, "iteration", {
-            "iteration": i,
-            "tools_called": len(tool_call_records),
-            "cost_usd": cost_usd,
-            "thought": thought[:200],
-        })
+        _push_stream_event(
+            stream_queue,
+            "iteration",
+            {
+                "iteration": i,
+                "tools_called": len(tool_call_records),
+                "cost_usd": cost_usd,
+                "thought": thought[:200],
+            },
+        )
 
         log.info(
             "iteration_complete",
@@ -438,14 +468,16 @@ async def run_agent(
     # Summary
     if not daemon_mode:
         console.print()
-        console.print(Panel(
-            f"Status: [bold]{session.status.value}[/bold]\n"
-            f"Iterations: {session.iteration_count}\n"
-            f"Total cost: [green]${session.total_cost_usd:.4f}[/green]\n"
-            f"Tokens: {session.total_input_tokens:,} in / {session.total_output_tokens:,} out",
-            title="[bold]Session Summary[/bold]",
-            border_style="green" if session.status == SessionStatus.COMPLETED else "yellow",
-        ))
+        console.print(
+            Panel(
+                f"Status: [bold]{session.status.value}[/bold]\n"
+                f"Iterations: {session.iteration_count}\n"
+                f"Total cost: [green]${session.total_cost_usd:.4f}[/green]\n"
+                f"Tokens: {session.total_input_tokens:,} in / {session.total_output_tokens:,} out",
+                title="[bold]Session Summary[/bold]",
+                border_style="green" if session.status == SessionStatus.COMPLETED else "yellow",
+            )
+        )
     else:
         log.info(
             "agent_completed",
@@ -559,18 +591,22 @@ def _schedule_db_writes(
         from silkroute.integrations.finops_client import report_usage
 
         finops_cfg = FinopsConfig()
-        pending.append(asyncio.create_task(report_usage(
-            finops_cfg,
-            provider=model.provider.value,
-            model=model.model_id,
-            input_tokens=iteration.input_tokens,
-            output_tokens=iteration.output_tokens,
-            cost_usd=iteration.cost_usd,
-            task_type=session.task[:100],
-            session_id=session.id,
-            project_id=session.project_id,
-            latency_ms=iteration.latency_ms,
-        )))
+        pending.append(
+            asyncio.create_task(
+                report_usage(
+                    finops_cfg,
+                    provider=model.provider.value,
+                    model=model.model_id,
+                    input_tokens=iteration.input_tokens,
+                    output_tokens=iteration.output_tokens,
+                    cost_usd=iteration.cost_usd,
+                    task_type=session.task[:100],
+                    session_id=session.id,
+                    project_id=session.project_id,
+                    latency_ms=iteration.latency_ms,
+                )
+            )
+        )
     except Exception as exc:
         log.warning("finops_report_schedule_failed", error=str(exc))
 
@@ -582,12 +618,16 @@ def _schedule_db_writes(
         from silkroute.db.repositories import tool_audit as db_tool_audit
 
         pending.append(asyncio.create_task(db_sessions.update_session(pool, session)))
-        pending.append(asyncio.create_task(
-            db_cost_logs.insert_cost_log(pool, session, iteration, model),
-        ))
+        pending.append(
+            asyncio.create_task(
+                db_cost_logs.insert_cost_log(pool, session, iteration, model),
+            )
+        )
         if iteration.tool_calls:
-            pending.append(asyncio.create_task(
-                db_tool_audit.insert_tool_audit_logs(pool, session, iteration),
-            ))
+            pending.append(
+                asyncio.create_task(
+                    db_tool_audit.insert_tool_audit_logs(pool, session, iteration),
+                )
+            )
     except Exception as exc:
         log.warning("db_write_schedule_failed", error=str(exc))

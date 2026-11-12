@@ -117,8 +117,12 @@ class TestSerializeResult:
 
     def test_serialized_is_valid_json(self) -> None:
         result = TaskResult(
-            request_id="r1", session_id="s1", status="completed",
-            cost_usd=0.02, iterations=2, duration_ms=5000,
+            request_id="r1",
+            session_id="s1",
+            status="completed",
+            cost_usd=0.02,
+            iterations=2,
+            duration_ms=5000,
         )
         data = json.loads(serialize_result(result))
         assert data["request_id"] == "r1"

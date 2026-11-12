@@ -2,10 +2,8 @@
 
 from __future__ import annotations
 
-import pytest
-
 from silkroute.mantis.context.manager import ContextManager
-from silkroute.mantis.context.models import ContextEntry, ContextScope, ContextSnapshot
+from silkroute.mantis.context.models import ContextScope, ContextSnapshot
 
 
 class TestContextManagerSetGet:
@@ -195,11 +193,15 @@ class TestTokenTracking:
         # max_tokens=100; add STEP entry with 60 tokens, then another with 60 tokens
         mgr = ContextManager(max_tokens=100)
         await mgr.set("plan_key", "plan_data", ContextScope.PLAN, token_estimate=30)
-        await mgr.set("step_key_1", "step_data_1", ContextScope.STEP, source="step_1", token_estimate=60)
+        await mgr.set(
+            "step_key_1", "step_data_1", ContextScope.STEP, source="step_1", token_estimate=60
+        )
         # Now at 90 tokens — under budget
 
         # Adding a second STEP entry (60 tokens) causes overflow -> evict step_key_1
-        await mgr.set("step_key_2", "step_data_2", ContextScope.STEP, source="step_2", token_estimate=60)
+        await mgr.set(
+            "step_key_2", "step_data_2", ContextScope.STEP, source="step_2", token_estimate=60
+        )
 
         # plan_key (PLAN-scoped) should NOT be evicted
         assert mgr.get("plan_key") is not None

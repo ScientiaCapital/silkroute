@@ -114,8 +114,14 @@ class TestHealExecutor:
     @pytest.mark.asyncio
     @pytest.mark.parametrize(
         "fault",
-        ["recorder_stopped", "signal_loss", "storage_full",
-         "storage_unmounted", "device_offline", "cpu_overload"],
+        [
+            "recorder_stopped",
+            "signal_loss",
+            "storage_full",
+            "storage_unmounted",
+            "device_offline",
+            "cpu_overload",
+        ],
     )
     async def test_live_playbook_heals_every_fault(self, fault: str) -> None:
         # The SHIPPED playbook was evolved to full coverage (PR #1) — every
@@ -137,8 +143,14 @@ class TestHealExecutor:
     @pytest.mark.asyncio
     @pytest.mark.parametrize(
         "fault",
-        ["recorder_stopped", "signal_loss", "storage_full",
-         "storage_unmounted", "device_offline", "cpu_overload"],
+        [
+            "recorder_stopped",
+            "signal_loss",
+            "storage_full",
+            "storage_unmounted",
+            "device_offline",
+            "cpu_overload",
+        ],
     )
     async def test_complete_playbook_heals_everything(self, fault: str, tmp_path: Path) -> None:
         playbook = tmp_path / "complete.yaml"
@@ -166,8 +178,12 @@ class TestSecurityPosture:
         # Action tools must NEVER be in the production epiphan default allowlist.
         prod = set(MCPConfig().epiphan_tool_allowlist)
         actions = {
-            "start_recorder", "restart_input", "rotate_recordings",
-            "remount_storage", "reboot_device", "throttle_channels",
+            "start_recorder",
+            "restart_input",
+            "rotate_recordings",
+            "remount_storage",
+            "reboot_device",
+            "throttle_channels",
         }
         assert prod.isdisjoint(actions)
 

@@ -4,11 +4,9 @@ from __future__ import annotations
 
 import tempfile
 from pathlib import Path
-from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
-import pytest
 
 from silkroute.mantis.skills.builtin.docs_skill import _docs_lookup_handler
 from silkroute.mantis.skills.builtin.http_skill import _http_request_handler, _is_blocked_url
@@ -16,7 +14,6 @@ from silkroute.mantis.skills.builtin.llm_skill import _code_review_handler, _sum
 from silkroute.mantis.skills.builtin.search_skill import _search_grep_handler
 from silkroute.mantis.skills.context7 import Context7Client, Context7Result, DocSnippet, LibraryInfo
 from silkroute.mantis.skills.models import SkillContext
-
 
 # ─────────────────────────────────────────────────────────
 # http_skill
@@ -96,7 +93,9 @@ class TestHttpSkillRequest:
         mock_client.__aexit__ = AsyncMock(return_value=False)
         mock_client.request = AsyncMock(return_value=mock_response)
 
-        with patch("silkroute.mantis.skills.builtin.http_skill.httpx.AsyncClient", return_value=mock_client):
+        with patch(
+            "silkroute.mantis.skills.builtin.http_skill.httpx.AsyncClient", return_value=mock_client
+        ):
             result = await _http_request_handler(url="https://example.com/api")
 
         assert "HTTP 200" in result
@@ -116,7 +115,9 @@ class TestHttpSkillRequest:
         mock_client.__aexit__ = AsyncMock(return_value=False)
         mock_client.request = AsyncMock(return_value=mock_response)
 
-        with patch("silkroute.mantis.skills.builtin.http_skill.httpx.AsyncClient", return_value=mock_client):
+        with patch(
+            "silkroute.mantis.skills.builtin.http_skill.httpx.AsyncClient", return_value=mock_client
+        ):
             result = await _http_request_handler(url="https://example.com/big")
 
         assert "Truncated" in result
@@ -135,7 +136,9 @@ class TestHttpSkillRequest:
         mock_client.__aexit__ = AsyncMock(return_value=False)
         mock_client.request = AsyncMock(return_value=mock_response)
 
-        with patch("silkroute.mantis.skills.builtin.http_skill.httpx.AsyncClient", return_value=mock_client):
+        with patch(
+            "silkroute.mantis.skills.builtin.http_skill.httpx.AsyncClient", return_value=mock_client
+        ):
             result = await _http_request_handler(url="https://example.com/", timeout=999)
 
         assert "HTTP 200" in result
@@ -228,7 +231,9 @@ class TestDocsLookupSkill:
 
     async def test_docs_lookup_success(self) -> None:
         mock_result = Context7Result(
-            library=LibraryInfo(id="lib/fastapi", name="FastAPI", version="0.115.0", trust_score=0.95),
+            library=LibraryInfo(
+                id="lib/fastapi", name="FastAPI", version="0.115.0", trust_score=0.95
+            ),
             snippets=[
                 DocSnippet(
                     title="Routing",

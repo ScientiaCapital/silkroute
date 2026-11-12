@@ -261,7 +261,9 @@ class ApiConfig(BaseSettings):
 
     model_config = SettingsConfigDict(env_prefix="SILKROUTE_API_", populate_by_name=True)
 
-    host: str = Field(default="0.0.0.0", description="API bind address")
+    # Loopback by default. Containers bind all interfaces explicitly
+    # (scripts/start.sh, SILKROUTE_API_HOST in docker-compose.prod.yml).
+    host: str = Field(default="127.0.0.1", description="API bind address")
     port: int = Field(default=8787, description="API listen port")
     # Accept the documented SILKROUTE_API_KEY. Without an explicit alias the
     # env_prefix would make the real var SILKROUTE_API_API_KEY, silently leaving
@@ -276,14 +278,13 @@ class ApiConfig(BaseSettings):
         description="Allowed CORS origins",
     )
     queue_maxsize: int = Field(default=100, description="Max pending tasks in queue")
-    stream_timeout_seconds: int = Field(
-        default=300, description="Server-side SSE stream timeout"
-    )
+    stream_timeout_seconds: int = Field(default=300, description="Server-side SSE stream timeout")
     demo_mode: bool = Field(
         default=False,
         description=(
             "When true, disable money-spending endpoints (/runtime/invoke, "
-            "/runtime/stream, POST /tasks) so a public try-it deployment "
+            "/runtime/stream, POST /tasks, POST /supervisor/sessions and "
+            "/supervisor/sessions/{id}/resume) so a public try-it deployment "
             "cannot drain the budget. Read-only endpoints stay reachable."
         ),
     )
@@ -603,14 +604,16 @@ class SilkRouteSettings(BaseSettings):
     @model_validator(mode="after")
     def validate_at_least_one_provider(self) -> SilkRouteSettings:
         """Ensure at least one LLM provider is configured."""
-        has_provider = any([
-            self.providers.openrouter_api_key,
-            self.providers.deepseek_api_key,
-            self.providers.qwen_api_key,
-            self.providers.glm_api_key,
-            self.providers.moonshot_api_key,
-            self.providers.ollama_enabled,
-        ])
+        has_provider = any(
+            [
+                self.providers.openrouter_api_key,
+                self.providers.deepseek_api_key,
+                self.providers.qwen_api_key,
+                self.providers.glm_api_key,
+                self.providers.moonshot_api_key,
+                self.providers.ollama_enabled,
+            ]
+        )
         if not has_provider:
             raise ValueError(
                 "At least one LLM provider must be configured. "

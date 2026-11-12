@@ -85,8 +85,7 @@ class TaskQueue:
         current_len = await self._redis.llen(KEY_PENDING)
         if current_len >= self._maxsize:
             raise RuntimeError(
-                f"Queue full ({current_len}/{self._maxsize}). "
-                "Try again later or increase maxsize."
+                f"Queue full ({current_len}/{self._maxsize}). Try again later or increase maxsize."
             )
 
         await self._redis.rpush(KEY_PENDING, serialize_request(request))

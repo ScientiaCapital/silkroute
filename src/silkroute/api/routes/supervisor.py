@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from silkroute.api.auth import require_auth
+from silkroute.api.auth import require_auth, require_not_demo
 from silkroute.api.deps import get_db_pool, get_settings
 
 if TYPE_CHECKING:
@@ -62,9 +62,7 @@ def _session_to_response(
         id=session.id,
         project_id=session.project_id,
         status=session.status.value,
-        total_cost_usd=(
-            total_cost_usd if total_cost_usd is not None else session.total_cost_usd
-        ),
+        total_cost_usd=(total_cost_usd if total_cost_usd is not None else session.total_cost_usd),
         steps=_steps_to_response(session.plan.steps),
         created_at=session.created_at.isoformat(),
         updated_at=session.updated_at.isoformat(),
@@ -86,12 +84,15 @@ async def list_sessions(
     from silkroute.db.repositories.supervisor import list_supervisor_sessions
 
     sessions = await list_supervisor_sessions(
-        db_pool, project_id=project_id, status=status, limit=limit,
+        db_pool,
+        project_id=project_id,
+        status=status,
+        limit=limit,
     )
     return [_session_to_response(s) for s in sessions]
 
 
-@router.post("/sessions")
+@router.post("/sessions", dependencies=[Depends(require_not_demo)])
 async def create_session(
     body: SupervisorSessionCreateRequest,
     settings: SilkRouteSettings = Depends(get_settings),
@@ -124,10 +125,13 @@ async def create_session(
     )
 
     session = await rt.create_session(plan, project_id=body.project_id)
-    result = await rt._run_session(session, RuntimeConfig(
-        project_id=body.project_id,
-        budget_limit_usd=body.total_budget_usd,
-    ))
+    result = await rt._run_session(
+        session,
+        RuntimeConfig(
+            project_id=body.project_id,
+            budget_limit_usd=body.total_budget_usd,
+        ),
+    )
 
     return _session_to_response(session, total_cost_usd=result.cost_usd)
 
@@ -150,7 +154,7 @@ async def get_session(
     return _session_to_response(session)
 
 
-@router.post("/sessions/{session_id}/resume")
+@router.post("/sessions/{session_id}/resume", dependencies=[Depends(require_not_demo)])
 async def resume_session(
     session_id: str,
     settings: SilkRouteSettings = Depends(get_settings),

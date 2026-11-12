@@ -149,7 +149,9 @@ class TestLegacyRuntime:
         async def mock_run_agent(task, *, stream_queue=None, **kwargs):
             """Mock that pushes a stream event and None sentinel."""
             if stream_queue is not None:
-                await stream_queue.put(json.dumps({"type": "completed", "output": "streamed output"}))
+                await stream_queue.put(
+                    json.dumps({"type": "completed", "output": "streamed output"})
+                )
                 await stream_queue.put(None)
             mock_session = MagicMock()
             mock_session.status.value = "completed"
@@ -178,9 +180,11 @@ class TestDeepAgentsRuntime:
     async def test_invoke_without_deepagents_raises(self) -> None:
         """When deepagents is not importable, raise NotImplementedError."""
         runtime = DeepAgentsRuntime()
-        with patch.dict("sys.modules", {"deepagents": None}):
-            with pytest.raises(NotImplementedError, match="deepagents"):
-                await runtime.invoke("Do task")
+        with (
+            patch.dict("sys.modules", {"deepagents": None}),
+            pytest.raises(NotImplementedError, match="deepagents"),
+        ):
+            await runtime.invoke("Do task")
 
     @pytest.mark.asyncio
     async def test_invoke_delegates_to_code_writer(self) -> None:

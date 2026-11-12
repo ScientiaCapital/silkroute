@@ -73,9 +73,7 @@ class DeepAgentsRuntime:
             metadata={"runtime": "deepagents", "model": cfg.model_override, **result.metadata},
         )
 
-    async def stream(
-        self, task: str, config: RuntimeConfig | None = None
-    ) -> AsyncIterator[str]:
+    async def stream(self, task: str, config: RuntimeConfig | None = None) -> AsyncIterator[str]:
         """Stream output from Deep Agents — batch-then-yield for Phase 1."""
         result = await self.invoke(task, config)
         yield result.output

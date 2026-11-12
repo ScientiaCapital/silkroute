@@ -23,9 +23,7 @@ class TestCreateOpenrouterModel:
         assert str(model.openai_api_base) == _OPENROUTER_BASE_URL
 
     def test_model_id_passed_through(self) -> None:
-        model = create_openrouter_model(
-            model_id="qwen/qwen3-coder", api_key="sk-test-123"
-        )
+        model = create_openrouter_model(model_id="qwen/qwen3-coder", api_key="sk-test-123")
         assert model.model_name == "qwen/qwen3-coder"
 
     def test_temperature_default_zero(self) -> None:

@@ -58,9 +58,7 @@ class ResearchEngine:
         self._project_id = project_id
         self._experiment_timeout_seconds = experiment_timeout_seconds  # 0 = no per-exp cap
         self._max_hours = max_hours  # 0 = no wall-clock cap
-        self._ledger = Ledger(
-            project_root / ".silkroute" / "autoresearch" / "results.tsv"
-        )
+        self._ledger = Ledger(project_root / ".silkroute" / "autoresearch" / "results.tsv")
         self._program = load_program(target.name)
         self._should_stop = False
         self._baseline: Metrics | None = None
@@ -121,14 +119,16 @@ class ResearchEngine:
         console.print("[dim]Establishing baseline...[/dim]")
         self._baseline = await self._target.evaluate()
         baseline_commit = self._git_short_hash()
-        self._ledger.append(LedgerEntry(
-            commit=baseline_commit,
-            score=self._baseline.score,
-            pass_rate=self._baseline.pass_rate,
-            coverage=self._baseline.coverage_pct,
-            status="keep",
-            description="baseline",
-        ))
+        self._ledger.append(
+            LedgerEntry(
+                commit=baseline_commit,
+                score=self._baseline.score,
+                pass_rate=self._baseline.pass_rate,
+                coverage=self._baseline.coverage_pct,
+                status="keep",
+                description="baseline",
+            )
+        )
         console.print(f"  Baseline: {self._baseline.summary()}\n")
 
         run_start = time.monotonic()
@@ -137,8 +137,7 @@ class ResearchEngine:
         while not self._should_stop:
             if self._max_experiments > 0 and self._experiment_count >= self._max_experiments:
                 console.print(
-                    f"\n[green]Reached max experiments "
-                    f"({self._max_experiments}). Stopping.[/green]"
+                    f"\n[green]Reached max experiments ({self._max_experiments}). Stopping.[/green]"
                 )
                 break
 
@@ -168,14 +167,16 @@ class ResearchEngine:
                 timeout_s = int(self._experiment_timeout_seconds)
                 console.print(f"  [red]TIMEOUT after {timeout_s}s[/red]")
                 if await self._handle_failed_experiment(
-                    f"crash: timeout after {timeout_s}s", "timeout",
+                    f"crash: timeout after {timeout_s}s",
+                    "timeout",
                 ):
                     break
             except Exception as e:
                 logger.exception("Experiment crashed: %s", e)
                 console.print(f"  [red]CRASH: {e}[/red]")
                 if await self._handle_failed_experiment(
-                    f"crash: {str(e)[:80]}", str(e)[:80],
+                    f"crash: {str(e)[:80]}",
+                    str(e)[:80],
                 ):
                     break
 
@@ -192,14 +193,16 @@ class ResearchEngine:
         self._consecutive_crashes += 1
         self._rollback_experiment()
 
-        self._ledger.append(LedgerEntry(
-            commit=self._git_short_hash(),
-            score=0.0,
-            pass_rate=0.0,
-            coverage=0.0,
-            status="crash",
-            description=description,
-        ))
+        self._ledger.append(
+            LedgerEntry(
+                commit=self._git_short_hash(),
+                score=0.0,
+                pass_rate=0.0,
+                coverage=0.0,
+                status="crash",
+                description=description,
+            )
+        )
         await self._record_outcome_memory("crash", memory_reason, 0.0, importance=0.2)
 
         if self._consecutive_crashes >= _MAX_CONSECUTIVE_CRASHES:
@@ -279,16 +282,21 @@ class ResearchEngine:
                 )
                 description = change.rationale
             self._baseline = metrics
-            self._ledger.append(LedgerEntry(
-                commit=commit_hash,
-                score=metrics.score,
-                pass_rate=metrics.pass_rate,
-                coverage=metrics.coverage_pct,
-                status="keep",
-                description=description,
-            ))
+            self._ledger.append(
+                LedgerEntry(
+                    commit=commit_hash,
+                    score=metrics.score,
+                    pass_rate=metrics.pass_rate,
+                    coverage=metrics.coverage_pct,
+                    status="keep",
+                    description=description,
+                )
+            )
             await self._record_outcome_memory(
-                "keep", description, metrics.score, importance=0.6,
+                "keep",
+                description,
+                metrics.score,
+                importance=0.6,
             )
         else:
             # DISCARD — revert
@@ -299,16 +307,21 @@ class ResearchEngine:
             self._git_reset()
             # Cache holds the discarded candidate's eval output — stale now
             self._target.invalidate_eval_cache()
-            self._ledger.append(LedgerEntry(
-                commit=commit_hash,
-                score=metrics.score,
-                pass_rate=metrics.pass_rate,
-                coverage=metrics.coverage_pct,
-                status="discard",
-                description=change.rationale,
-            ))
+            self._ledger.append(
+                LedgerEntry(
+                    commit=commit_hash,
+                    score=metrics.score,
+                    pass_rate=metrics.pass_rate,
+                    coverage=metrics.coverage_pct,
+                    status="discard",
+                    description=change.rationale,
+                )
+            )
             await self._record_outcome_memory(
-                "discard", change.rationale, metrics.score, importance=0.3,
+                "discard",
+                change.rationale,
+                metrics.score,
+                importance=0.3,
             )
         self._pending_commit = None
 
@@ -329,7 +342,11 @@ class ResearchEngine:
         return False, False
 
     async def _record_outcome_memory(
-        self, status: str, rationale: str, score: float, importance: float,
+        self,
+        status: str,
+        rationale: str,
+        score: float,
+        importance: float,
     ) -> None:
         """Persist an outcome memory. Fail-open — never affects git/ledger state.
 
@@ -365,8 +382,7 @@ class ResearchEngine:
         # Check file is in allowed paths
         if not any(change.file_path.startswith(p) for p in self._target.allowed_paths):
             raise ValueError(
-                f"File {change.file_path} not in allowed paths: "
-                f"{self._target.allowed_paths}"
+                f"File {change.file_path} not in allowed paths: {self._target.allowed_paths}"
             )
 
         # Check file exists
@@ -378,8 +394,7 @@ class ResearchEngine:
         content = full_path.read_text()
         if change.old_code not in content:
             raise ValueError(
-                f"old_code not found in {change.file_path}. "
-                f"LLM may have hallucinated the code."
+                f"old_code not found in {change.file_path}. LLM may have hallucinated the code."
             )
 
         # Check diff size
@@ -388,8 +403,7 @@ class ResearchEngine:
         diff_size = abs(new_lines - old_lines) + max(new_lines, old_lines)
         if diff_size > self._target.max_diff_lines:
             raise ValueError(
-                f"Diff too large: {diff_size} lines "
-                f"(max {self._target.max_diff_lines})"
+                f"Diff too large: {diff_size} lines (max {self._target.max_diff_lines})"
             )
 
     def _apply_change(self, change: ProposedChange) -> None:
@@ -408,20 +422,25 @@ class ResearchEngine:
         result = subprocess.run(
             ["git", "branch", "--list", branch],
             cwd=str(self._root),
-            capture_output=True, text=True,
+            capture_output=True,
+            text=True,
         )
         if result.stdout.strip():
             # Branch exists, check it out
             subprocess.run(
                 ["git", "checkout", branch],
                 cwd=str(self._root),
-                capture_output=True, text=True, check=True,
+                capture_output=True,
+                text=True,
+                check=True,
             )
         else:
             subprocess.run(
                 ["git", "checkout", "-b", branch],
                 cwd=str(self._root),
-                capture_output=True, text=True, check=True,
+                capture_output=True,
+                text=True,
+                check=True,
             )
         return branch
 
@@ -431,12 +450,16 @@ class ResearchEngine:
         subprocess.run(
             add_cmd,
             cwd=str(self._root),
-            capture_output=True, text=True, check=True,
+            capture_output=True,
+            text=True,
+            check=True,
         )
         subprocess.run(
             ["git", "commit", "-m", message],
             cwd=str(self._root),
-            capture_output=True, text=True, check=True,
+            capture_output=True,
+            text=True,
+            check=True,
         )
         return self._git_short_hash()
 
@@ -445,7 +468,9 @@ class ResearchEngine:
         subprocess.run(
             ["git", "reset", "--hard", "HEAD~1"],
             cwd=str(self._root),
-            capture_output=True, text=True, check=True,
+            capture_output=True,
+            text=True,
+            check=True,
         )
 
     def _git_short_hash(self) -> str:
@@ -453,7 +478,9 @@ class ResearchEngine:
         result = subprocess.run(
             ["git", "rev-parse", "--short", "HEAD"],
             cwd=str(self._root),
-            capture_output=True, text=True, check=True,
+            capture_output=True,
+            text=True,
+            check=True,
         )
         return result.stdout.strip()
 
@@ -462,13 +489,15 @@ class ResearchEngine:
         result = subprocess.run(
             ["git", "status", "--porcelain"],
             cwd=str(self._root),
-            capture_output=True, text=True,
+            capture_output=True,
+            text=True,
         )
         if result.stdout.strip():
             subprocess.run(
                 ["git", "checkout", "."],
                 cwd=str(self._root),
-                capture_output=True, text=True,
+                capture_output=True,
+                text=True,
             )
 
     def _setup_signal_handlers(self) -> None:
@@ -480,8 +509,7 @@ class ResearchEngine:
     def _handle_signal(self) -> None:
         """Handle shutdown signal."""
         console.print(
-            "\n[yellow]Shutdown signal received. "
-            "Finishing current experiment...[/yellow]"
+            "\n[yellow]Shutdown signal received. Finishing current experiment...[/yellow]"
         )
         self._should_stop = True
 

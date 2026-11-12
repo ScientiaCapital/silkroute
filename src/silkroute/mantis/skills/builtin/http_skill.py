@@ -1,7 +1,8 @@
 """HTTP request skill with SSRF protection.
 
 Provides agents with the ability to make outbound HTTP requests while
-blocking RFC 1918 private addresses, loopback, and link-local ranges.
+blocking every non-public address (see silkroute.network.ssrf), including on
+each redirect hop.
 """
 
 from __future__ import annotations
@@ -10,6 +11,7 @@ import httpx
 import structlog
 
 from silkroute.mantis.skills.models import SkillCategory, SkillContext, SkillSpec
+from silkroute.network.ssrf import SSRFBlockedError, SSRFPinnedTransport, guarded_request
 from silkroute.network.ssrf import is_ssrf_blocked as _is_blocked_url
 
 log = structlog.get_logger()
@@ -43,10 +45,15 @@ async def _http_request_handler(
     req_headers = headers or {}
 
     try:
-        async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
-            response = await client.request(
-                method=method,
-                url=url,
+        # Manual redirects (SSRF check on every hop) + connection pinned to the
+        # checked IP; see silkroute.network.ssrf.
+        async with httpx.AsyncClient(
+            timeout=timeout, follow_redirects=False, transport=SSRFPinnedTransport()
+        ) as client:
+            response = await guarded_request(
+                client,
+                method,
+                url,
                 headers=req_headers,
                 content=body.encode() if body else None,
             )
@@ -62,6 +69,8 @@ async def _http_request_handler(
             result += f"\n\n[Truncated: response exceeded {_MAX_RESPONSE_BYTES} bytes]"
 
         return result
+    except SSRFBlockedError as e:
+        return f"Error: {e}"
     except httpx.TimeoutException:
         return f"Error: Request timed out after {timeout}s"
     except httpx.RequestError as e:
@@ -76,8 +85,9 @@ http_request_skill = SkillSpec(
     name="http_request",
     description=(
         "Make an outbound HTTP request to a URL. "
-        "Blocked: private IPs (10.x, 172.16-31.x, 192.168.x), loopback (127.x), "
-        "link-local (169.254.x), file:// and other non-http schemes. "
+        "Blocked: any non-public address (private, loopback, link-local, CGNAT, "
+        "metadata IPs), unresolvable hosts, file:// and other non-http schemes, "
+        "including on redirects (max 5). "
         "Response truncated at 20 KB."
     ),
     category=SkillCategory.WEB,

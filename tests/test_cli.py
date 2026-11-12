@@ -267,9 +267,7 @@ class TestProjectsCommands:
             "budget_daily_usd": 0.10,
         }
 
-        result = runner.invoke(
-            main, ["projects", "create", "myproj", "--name", "My Project"]
-        )
+        result = runner.invoke(main, ["projects", "create", "myproj", "--name", "My Project"])
         assert result.exit_code == 0
         assert "Created" in result.output
         assert "myproj" in result.output
@@ -554,9 +552,7 @@ class TestDbMigrateCommands:
 
         mock_load_settings.return_value = test_settings
         mock_create_pool.return_value = self._mock_pool()
-        mock_apply.return_value = [
-            Migration(version=1, name="0001_agent_memories.sql", path=None)
-        ]
+        mock_apply.return_value = [Migration(version=1, name="0001_agent_memories.sql", path=None)]
 
         result = runner.invoke(main, ["db", "migrate"])
         assert result.exit_code == 0

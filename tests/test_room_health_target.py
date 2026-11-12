@@ -97,12 +97,8 @@ class TestEvaluation:
 
     @pytest.mark.asyncio
     async def test_complete_beats_seed(self, tmp_path: Path) -> None:
-        seed = await _target_with_playbook(
-            tmp_path / "seed", SEED_FIXTURE.read_text()
-        ).evaluate()
-        complete = await _target_with_playbook(
-            tmp_path / "complete", COMPLETE_PLAYBOOK
-        ).evaluate()
+        seed = await _target_with_playbook(tmp_path / "seed", SEED_FIXTURE.read_text()).evaluate()
+        complete = await _target_with_playbook(tmp_path / "complete", COMPLETE_PLAYBOOK).evaluate()
         # A better playbook must score higher — this is what drives KEEP.
         assert complete.is_better_than(seed)
 
@@ -121,8 +117,7 @@ class TestEvaluation:
     async def test_over_broad_rule_fails_healthy_room(self, tmp_path: Path) -> None:
         # A rule that fires on any online device "remediates" a healthy room.
         overbroad = (
-            "rules:\n  - id: greedy\n    when: {device_state: online}\n"
-            "    action: start_recorder\n"
+            "rules:\n  - id: greedy\n    when: {device_state: online}\n    action: start_recorder\n"
         )
         m = await _target_with_playbook(tmp_path, overbroad).evaluate()
         assert "healthy" in m.error_summary

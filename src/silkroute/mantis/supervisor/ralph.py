@@ -74,17 +74,21 @@ class RalphController:
         for plan in plans:
             try:
                 session = await self._execute_plan(plan)
-                results.append({
-                    "session_id": session.id,
-                    "status": session.status.value,
-                    "cost_usd": session.total_cost_usd,
-                })
+                results.append(
+                    {
+                        "session_id": session.id,
+                        "status": session.status.value,
+                        "cost_usd": session.total_cost_usd,
+                    }
+                )
             except (RuntimeError, OSError, ValueError, TimeoutError) as exc:
                 await self._handle_failure(None, exc)
-                results.append({
-                    "status": "failed",
-                    "error": str(exc),
-                })
+                results.append(
+                    {
+                        "status": "failed",
+                        "error": str(exc),
+                    }
+                )
 
         log.info("ralph_cycle_complete", plans_executed=len(results))
         return {
@@ -151,10 +155,13 @@ class RalphController:
         session = await rt.create_session(plan, project_id=plan.project_id)
 
         budget = self._supervisor_config.ralph_budget_usd if self._supervisor_config else 5.0
-        await rt._run_session(session, RuntimeConfig(
-            project_id=plan.project_id,
-            budget_limit_usd=budget,
-        ))
+        await rt._run_session(
+            session,
+            RuntimeConfig(
+                project_id=plan.project_id,
+                budget_limit_usd=budget,
+            ),
+        )
 
         return session
 

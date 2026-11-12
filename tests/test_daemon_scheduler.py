@@ -109,11 +109,13 @@ class TestDaemonScheduler:
         config = _make_daemon_config()
         queue = MagicMock(spec=TaskQueue)
         scheduler = DaemonScheduler(config, queue)
-        scheduler._scheduler = MagicMock()
+        inner = MagicMock()
+        scheduler._scheduler = inner
 
         await scheduler.stop()
 
-        scheduler._scheduler is None
+        inner.shutdown.assert_called_once_with(wait=False)
+        assert scheduler._scheduler is None
 
     @pytest.mark.asyncio
     async def test_stop_noop_when_not_started(self) -> None:

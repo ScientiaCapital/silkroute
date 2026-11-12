@@ -171,11 +171,13 @@ class OrchestratorRuntime:
 
         stages = plan.stages
         for stage_idx, stage in enumerate(stages):
-            yield json.dumps({
-                "type": "stage_start",
-                "stage": stage_idx,
-                "sub_tasks": [st.id for st in stage],
-            })
+            yield json.dumps(
+                {
+                    "type": "stage_start",
+                    "stage": stage_idx,
+                    "sub_tasks": [st.id for st in stage],
+                }
+            )
 
             # R2: Execute sub-tasks within a stage in parallel
             async def _run_sub_task(st: SubTask) -> dict[str, Any]:
@@ -220,10 +222,7 @@ class OrchestratorRuntime:
         tracker: BudgetTracker,
     ) -> list[SubAgentResult]:
         """Execute all sub-tasks in a stage concurrently."""
-        tasks = [
-            self._execute_sub_task(st, stage_idx, config, middleware, tracker)
-            for st in stage
-        ]
+        tasks = [self._execute_sub_task(st, stage_idx, config, middleware, tracker) for st in stage]
         return list(await asyncio.gather(*tasks))
 
     async def _execute_sub_task(
@@ -308,7 +307,7 @@ class OrchestratorRuntime:
                 and attempt < max_attempts - 1
                 and result.status in retry_config.retryable_statuses
             ):
-                delay = retry_config.backoff_base * (retry_config.backoff_factor ** attempt)
+                delay = retry_config.backoff_base * (retry_config.backoff_factor**attempt)
                 log.info(
                     "sub_task_retry",
                     sub_task_id=sub_task.id,

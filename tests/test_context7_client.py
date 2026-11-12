@@ -3,16 +3,13 @@
 from __future__ import annotations
 
 import asyncio
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import httpx
-import pytest
 
 from silkroute.mantis.skills.context7 import (
     Context7Client,
     Context7Result,
-    DocSnippet,
-    LibraryInfo,
 )
 
 
@@ -70,9 +67,7 @@ class TestResolveLibrary:
     """Context7Client.resolve_library()."""
 
     async def test_resolve_library_success(self) -> None:
-        client, mock_http = _make_client(
-            get_response=_make_response(_LIBRARY_SEARCH_RESPONSE)
-        )
+        client, mock_http = _make_client(get_response=_make_response(_LIBRARY_SEARCH_RESPONSE))
         result = await client.resolve_library("fastapi")
         assert result is not None
         assert result.id == "lib/fastapi"
@@ -166,10 +161,12 @@ class TestQueryConvenience:
     async def test_query_success(self) -> None:
         mock_http = MagicMock(spec=httpx.AsyncClient)
         # First call: search, second call: docs
-        mock_http.get = AsyncMock(side_effect=[
-            _make_response(_LIBRARY_SEARCH_RESPONSE),
-            _make_response(_DOCS_RESPONSE),
-        ])
+        mock_http.get = AsyncMock(
+            side_effect=[
+                _make_response(_LIBRARY_SEARCH_RESPONSE),
+                _make_response(_DOCS_RESPONSE),
+            ]
+        )
         client = Context7Client(http_client=mock_http)
 
         result = await client.query("fastapi", "routing")
@@ -191,11 +188,13 @@ class TestQueryConvenience:
         # With very small token budget, truncated should be True
         long_content = "X" * 1000
         library_resp = _make_response(_LIBRARY_SEARCH_RESPONSE)
-        docs_resp = _make_response({
-            "snippets": [
-                {"title": "Big", "content": long_content, "url": "", "relevance": 1.0},
-            ]
-        })
+        docs_resp = _make_response(
+            {
+                "snippets": [
+                    {"title": "Big", "content": long_content, "url": "", "relevance": 1.0},
+                ]
+            }
+        )
 
         mock_http = MagicMock(spec=httpx.AsyncClient)
         mock_http.get = AsyncMock(side_effect=[library_resp, docs_resp])
@@ -212,7 +211,6 @@ class TestSemaphoreRateLimiting:
     async def test_semaphore_limits_concurrent_requests(self) -> None:
         active_count = 0
         max_active = 0
-        barrier = asyncio.Event()
 
         async def slow_get(*args: object, **kwargs: object) -> MagicMock:
             nonlocal active_count, max_active

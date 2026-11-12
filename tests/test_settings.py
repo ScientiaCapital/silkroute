@@ -1,4 +1,5 @@
 """Tests for silkroute.config.settings."""
+
 from silkroute.config.settings import BudgetConfig, HardwareProfile, ModelTier
 
 
@@ -11,10 +12,12 @@ class TestModelTier:
     def test_tier_from_string(self):
         assert ModelTier("free") == ModelTier.FREE
 
+
 class TestHardwareProfile:
     def test_profiles(self):
         assert HardwareProfile.MAC_MINI.value == "mac-mini"
         assert HardwareProfile.MAC_STUDIO.value == "mac-studio"
+
 
 class TestBudgetConfig:
     def test_defaults(self):

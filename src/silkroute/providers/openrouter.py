@@ -154,9 +154,7 @@ def _resolve_provider_key(provider: Provider) -> str:
             return value
     chain = " or ".join(_PROVIDER_ENV_KEYS.get(provider, ()))
     label = _PROVIDER_LABELS.get(provider, str(provider))
-    raise ValueError(
-        f"No {label} API key found. Set {chain or 'the provider API key'}."
-    )
+    raise ValueError(f"No {label} API key found. Set {chain or 'the provider API key'}.")
 
 
 def _resolve_api_key() -> str:
