@@ -96,8 +96,7 @@ def decide_action(rules: list[dict[str, Any]], signals: dict[str, Any]) -> str:
 
 def _rule_matches(when: dict[str, Any], signals: dict[str, Any]) -> bool:
     return all(
-        key in signals and _condition_holds(cond, signals[key])
-        for key, cond in when.items()
+        key in signals and _condition_holds(cond, signals[key]) for key, cond in when.items()
     )
 
 

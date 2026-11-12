@@ -6,7 +6,7 @@ checkpointing → resume → budget enforcement → registry roundtrip.
 
 from __future__ import annotations
 
-import json
+from datetime import UTC
 from unittest.mock import AsyncMock
 
 import pytest
@@ -28,7 +28,10 @@ def _mock_child(runtime_type=None):
     mock = AsyncMock()
     mock.name = "mock"
     mock.invoke.return_value = AgentResult(
-        status="completed", output="done", cost_usd=0.02, iterations=1,
+        status="completed",
+        output="done",
+        cost_usd=0.02,
+        iterations=1,
     )
     return mock
 
@@ -78,7 +81,9 @@ class TestCheckpointResume:
             steps=[
                 SupervisorStep(id="a", name="done", status=StepStatus.COMPLETED),
                 SupervisorStep(
-                    id="b", name="pending", description="task2",
+                    id="b",
+                    name="pending",
+                    description="task2",
                     depends_on=["a"],
                 ),
             ],
@@ -113,11 +118,14 @@ class TestBudgetEnforcement:
     @pytest.mark.asyncio
     async def test_budget_stops_execution(self):
         """Supervisor should stop when budget is exhausted."""
+
         def expensive_child(rt=None):
             mock = AsyncMock()
             mock.name = "mock"
             mock.invoke.return_value = AgentResult(
-                status="completed", output="costly", cost_usd=3.0,
+                status="completed",
+                output="costly",
+                cost_usd=3.0,
             )
             return mock
 
@@ -161,15 +169,21 @@ class TestOrchestratorChildDelegation:
             mock = AsyncMock()
             mock.name = "mock"
             mock.invoke.return_value = AgentResult(
-                status="completed", output="done", cost_usd=0.01,
+                status="completed",
+                output="done",
+                cost_usd=0.01,
             )
             return mock
 
         plan = SupervisorPlan(
-            steps=[SupervisorStep(
-                id="a", name="test", description="task",
-                runtime_type="orchestrator",
-            )],
+            steps=[
+                SupervisorStep(
+                    id="a",
+                    name="test",
+                    description="task",
+                    runtime_type="orchestrator",
+                )
+            ],
         )
         rt = SupervisorRuntime(child_factory=tracking_factory)
         session = SupervisorSession(plan=plan)
@@ -184,29 +198,37 @@ class TestSkipOnFailure:
     @pytest.mark.asyncio
     async def test_skip_on_failure_continues(self):
         """Steps with skip_on_failure=True should not block downstream."""
+
         def failing_then_ok(rt=None):
             mock = AsyncMock()
             mock.name = "mock"
             mock.invoke.return_value = AgentResult(
-                status="failed", error="oops", cost_usd=0.01,
+                status="failed",
+                error="oops",
+                cost_usd=0.01,
             )
             return mock
 
         plan = SupervisorPlan(
             steps=[
                 SupervisorStep(
-                    id="a", name="fragile", description="may fail",
-                    skip_on_failure=True, max_retries=0,
+                    id="a",
+                    name="fragile",
+                    description="may fail",
+                    skip_on_failure=True,
+                    max_retries=0,
                 ),
                 SupervisorStep(
-                    id="b", name="next", description="should still run",
+                    id="b",
+                    name="next",
+                    description="should still run",
                     depends_on=["a"],
                 ),
             ],
         )
         rt = SupervisorRuntime(child_factory=failing_then_ok)
         session = SupervisorSession(plan=plan)
-        result = await rt._run_session(session, RuntimeConfig())
+        await rt._run_session(session, RuntimeConfig())
 
         # Step a should be skipped (not failed), step b should still execute
         assert plan.steps[0].status == StepStatus.SKIPPED
@@ -217,8 +239,9 @@ class TestSkipOnFailure:
 # Helpers
 # ──────────────────────────────────────────────────────────────
 
+
 def _make_mock_row(session: SupervisorSession) -> dict:
-    from datetime import datetime, timezone
+    from datetime import datetime
 
     return {
         "id": session.id,
@@ -231,11 +254,13 @@ def _make_mock_row(session: SupervisorSession) -> dict:
             "context_json": session.checkpoint.context_json,
             "step_results": session.checkpoint.step_results,
             "total_cost_usd": session.checkpoint.total_cost_usd,
-        } if session.checkpoint else None,
+        }
+        if session.checkpoint
+        else None,
         "context_json": session.plan.context,
         "total_cost_usd": session.total_cost_usd,
         "config_json": session.config_json,
-        "created_at": datetime.now(timezone.utc),
-        "updated_at": datetime.now(timezone.utc),
+        "created_at": datetime.now(UTC),
+        "updated_at": datetime.now(UTC),
         "error": session.error,
     }

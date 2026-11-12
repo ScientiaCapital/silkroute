@@ -29,7 +29,7 @@ from pathlib import Path
 from typing import Any
 
 import structlog
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
@@ -39,6 +39,9 @@ router = APIRouter(prefix="/demo", tags=["demo"])
 
 DEFAULT_TASK = "did recording start in room 320-B"
 DEFAULT_MODEL = "ollama/qwen2.5:14b"
+# These endpoints are public and must spend no money, so a live run may only use a
+# local Ollama model. Any other provider prefix is refused before the agent starts.
+LIVE_MODEL_PREFIX = "ollama/"
 
 # Fallback room snapshot — used only if demo/mock_epiphan_mcp.py is not importable
 # (e.g. a deployment that excludes the repo-root demo/ dir). Mirrors the mock's
@@ -428,9 +431,14 @@ async def demo_stream(
 ) -> StreamingResponse:
     """Stream a Think → Act → Observe agent trace over the mock room via SSE.
 
-        curl -N 'localhost:8787/demo/stream'
-        curl -N 'localhost:8787/demo/stream?live=true'   # real run_agent() over local Ollama
+    curl -N 'localhost:8787/demo/stream'
+    curl -N 'localhost:8787/demo/stream?live=true'   # real run_agent() over local Ollama
     """
+    if live and not model.startswith(LIVE_MODEL_PREFIX):
+        raise HTTPException(
+            status_code=400,
+            detail=f"live demo runs only local models; model must start with '{LIVE_MODEL_PREFIX}'",
+        )
     generator = _stream_live_trace(task, model) if live else _stream_trace(task, model, delay)
     return StreamingResponse(
         generator,
@@ -492,7 +500,7 @@ async def demo_heal(
 ) -> StreamingResponse:
     """Inject a fault into the mock room and stream the self-healing loop via SSE.
 
-        curl -N 'localhost:8787/demo/heal?fault=signal_loss'
+    curl -N 'localhost:8787/demo/heal?fault=signal_loss'
     """
     if fault not in HEAL_FAULTS:
         fault = "signal_loss"

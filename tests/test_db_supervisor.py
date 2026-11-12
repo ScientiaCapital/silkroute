@@ -5,11 +5,8 @@ Uses unittest.mock AsyncMock to simulate asyncpg.Pool.
 
 from __future__ import annotations
 
-import json
-from datetime import datetime, timezone
-from unittest.mock import AsyncMock, MagicMock
-
-import pytest
+from datetime import UTC, datetime
+from unittest.mock import AsyncMock
 
 from silkroute.db.repositories.supervisor import (
     _row_to_session,
@@ -52,8 +49,8 @@ def _make_row(session_id: str = "sess-1") -> dict:
         "context_json": {},
         "total_cost_usd": 0.0,
         "config_json": {},
-        "created_at": datetime.now(timezone.utc),
-        "updated_at": datetime.now(timezone.utc),
+        "created_at": datetime.now(UTC),
+        "updated_at": datetime.now(UTC),
         "error": "",
     }
 

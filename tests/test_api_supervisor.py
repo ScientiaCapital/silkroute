@@ -27,6 +27,7 @@ def client(test_settings):
 
     # Override DB pool and lifespan deps
     from silkroute.api import deps
+
     app.dependency_overrides[deps.get_settings] = lambda: test_settings
     app.dependency_overrides[deps.get_db_pool] = lambda: None
 
@@ -41,13 +42,17 @@ class TestCreateSession:
     """POST /supervisor/sessions"""
 
     @patch("silkroute.api.routes.supervisor.SupervisorRuntime")
-    def test_create_session_success(self, MockRT, client):
-        mock_rt = MockRT.return_value
+    def test_create_session_success(self, mock_rt_cls, client):
+        mock_rt = mock_rt_cls.return_value
         mock_rt.create_session = AsyncMock()
         mock_rt._run_session = AsyncMock()
 
         from silkroute.mantis.runtime.interface import AgentResult
-        from silkroute.mantis.supervisor.models import SupervisorSession, SupervisorPlan, SupervisorStep
+        from silkroute.mantis.supervisor.models import (
+            SupervisorPlan,
+            SupervisorSession,
+            SupervisorStep,
+        )
 
         session = SupervisorSession(
             id="sess-test",
@@ -56,7 +61,8 @@ class TestCreateSession:
         )
         mock_rt.create_session.return_value = session
         mock_rt._run_session.return_value = AgentResult(
-            status="completed", cost_usd=0.05,
+            status="completed",
+            cost_usd=0.05,
         )
 
         resp = client.post(
@@ -109,8 +115,10 @@ class TestListSessions:
     @patch("silkroute.db.repositories.supervisor.list_supervisor_sessions")
     def test_list_sessions_empty(self, mock_list, client):
         # Override db_pool to non-None so the endpoint proceeds
-        from silkroute.api import deps
         from unittest.mock import AsyncMock
+
+        from silkroute.api import deps
+
         mock_pool = AsyncMock()
         client.app.dependency_overrides[deps.get_db_pool] = lambda: mock_pool
         mock_list.return_value = []
@@ -145,15 +153,17 @@ class TestResumeSession:
     """POST /supervisor/sessions/{id}/resume"""
 
     @patch("silkroute.api.routes.supervisor.SupervisorRuntime")
-    def test_resume_not_found(self, MockRT, client):
-        mock_rt = MockRT.return_value
+    def test_resume_not_found(self, mock_rt_cls, client):
+        mock_rt = mock_rt_cls.return_value
 
         from silkroute.mantis.runtime.interface import AgentResult
 
-        mock_rt.resume_session = AsyncMock(return_value=AgentResult(
-            status="failed",
-            error="Session nonexist not found",
-        ))
+        mock_rt.resume_session = AsyncMock(
+            return_value=AgentResult(
+                status="failed",
+                error="Session nonexist not found",
+            )
+        )
 
         resp = client.post(
             "/supervisor/sessions/nonexist/resume",
@@ -166,8 +176,8 @@ class TestCancelSession:
     """DELETE /supervisor/sessions/{id}"""
 
     @patch("silkroute.api.routes.supervisor.SupervisorRuntime")
-    def test_cancel_not_found(self, MockRT, client):
-        mock_rt = MockRT.return_value
+    def test_cancel_not_found(self, mock_rt_cls, client):
+        mock_rt = mock_rt_cls.return_value
         mock_rt.cancel_session = AsyncMock(return_value=False)
 
         resp = client.delete(
@@ -177,8 +187,8 @@ class TestCancelSession:
         assert resp.status_code == 404
 
     @patch("silkroute.api.routes.supervisor.SupervisorRuntime")
-    def test_cancel_success(self, MockRT, client):
-        mock_rt = MockRT.return_value
+    def test_cancel_success(self, mock_rt_cls, client):
+        mock_rt = mock_rt_cls.return_value
         mock_rt.cancel_session = AsyncMock(return_value=True)
 
         resp = client.delete(

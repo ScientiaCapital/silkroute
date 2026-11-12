@@ -18,10 +18,14 @@ services:
   # LiteLLM Proxy — Chinese LLM routing, cost tracking, budget enforcement
   # ==========================================================================
   litellm:
-    image: ghcr.io/berriai/litellm:main-latest
+    # Pinned release + digest (multi-arch index). Bump deliberately:
+    #   gh api repos/BerriAI/litellm/releases/latest -q .tag_name
+    #   docker buildx imagetools inspect ghcr.io/berriai/litellm:<tag>
+    image: ghcr.io/berriai/litellm:v1.109.1@sha256:11175975a3093e05e92faee2fe2fe3412a3ae2fcaa849eb0fe25d5f0d8bcb2e9
     container_name: silkroute-litellm
+    # Published on loopback only — the proxy holds provider API keys.
     ports:
-      - "4000:4000"
+      - "127.0.0.1:4000:4000"
     environment:
       DATABASE_URL: postgresql://silkroute:silkroute@postgres:5432/silkroute
       STORE_MODEL_IN_DB: "true"
@@ -34,7 +38,7 @@ services:
       ZHIPUAI_API_KEY: ${SILKROUTE_GLM_API_KEY:-}
     volumes:
       - ./litellm_config.yaml:/app/config.yaml
-    command: --config /app/config.yaml --detailed_debug
+    command: --config /app/config.yaml
     depends_on:
       postgres:
         condition: service_healthy
@@ -58,8 +62,9 @@ services:
       POSTGRES_DB: silkroute
       POSTGRES_USER: silkroute
       POSTGRES_PASSWORD: silkroute
+    # Loopback only — default credentials, never expose on the LAN.
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - silkroute_pgdata:/var/lib/postgresql/data
       - ./sql/init.sql:/docker-entrypoint-initdb.d/01-init.sql
@@ -76,8 +81,9 @@ services:
   redis:
     image: redis:7-alpine
     container_name: silkroute-redis
+    # Loopback only — Redis has no auth configured here.
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
     volumes:
       - silkroute_redis:/data
     restart: unless-stopped

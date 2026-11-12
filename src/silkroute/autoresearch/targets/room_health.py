@@ -128,8 +128,7 @@ class RoomHealthTarget:
             history = "## Recent Experiments\n"
             for entry in recent_entries:
                 history += (
-                    f"- [{entry['status']}] score={entry['score']:.4f} "
-                    f"| {entry['description']}\n"
+                    f"- [{entry['status']}] score={entry['score']:.4f} | {entry['description']}\n"
                 )
             parts.append(history)
 

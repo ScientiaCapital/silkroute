@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 import json
-from unittest.mock import AsyncMock, patch
+from datetime import UTC
+from unittest.mock import AsyncMock
 
 import pytest
 
-from silkroute.mantis.context.manager import ContextManager
 from silkroute.mantis.runtime.interface import AgentResult, RuntimeConfig, RuntimeType
 from silkroute.mantis.supervisor.models import (
     SessionStatus,
@@ -97,7 +97,6 @@ class TestSupervisorRuntimeBasic:
     @pytest.mark.asyncio
     async def test_invoke_context_passing(self):
         """Step 2 should be able to read step 1's output from context."""
-        captured_plans = []
 
         def factory(rt=None):
             mock = AsyncMock()
@@ -142,10 +141,15 @@ class TestSupervisorRetry:
             return mock
 
         plan = SupervisorPlan(
-            steps=[SupervisorStep(
-                id="s1", name="retry_me", description="task",
-                max_retries=3, retry_backoff_seconds=0.001,
-            )],
+            steps=[
+                SupervisorStep(
+                    id="s1",
+                    name="retry_me",
+                    description="task",
+                    max_retries=3,
+                    retry_backoff_seconds=0.001,
+                )
+            ],
         )
         rt = SupervisorRuntime(child_factory=factory)
         session = SupervisorSession(plan=plan)
@@ -158,10 +162,15 @@ class TestSupervisorRetry:
         """Max retries exceeded → step fails."""
         rt = SupervisorRuntime(child_factory=_failing_factory)
         plan = SupervisorPlan(
-            steps=[SupervisorStep(
-                id="s1", name="fail_me", description="task",
-                max_retries=1, retry_backoff_seconds=0.001,
-            )],
+            steps=[
+                SupervisorStep(
+                    id="s1",
+                    name="fail_me",
+                    description="task",
+                    max_retries=1,
+                    retry_backoff_seconds=0.001,
+                )
+            ],
         )
         session = SupervisorSession(plan=plan)
         result = await rt._run_session(session, RuntimeConfig())
@@ -180,7 +189,9 @@ class TestSupervisorConditions:
             steps=[
                 SupervisorStep(id="a", name="first", description="task1"),
                 SupervisorStep(
-                    id="b", name="conditional", description="task2",
+                    id="b",
+                    name="conditional",
+                    description="task2",
                     depends_on=["a"],
                     condition="a.status == completed",
                 ),
@@ -200,7 +211,9 @@ class TestSupervisorConditions:
             steps=[
                 SupervisorStep(id="a", name="first", description="task1"),
                 SupervisorStep(
-                    id="b", name="conditional", description="task2",
+                    id="b",
+                    name="conditional",
+                    description="task2",
                     depends_on=["a"],
                     condition="a.status == failed",
                 ),
@@ -235,11 +248,14 @@ class TestSupervisorBudget:
     @pytest.mark.asyncio
     async def test_invoke_budget_exhausted(self):
         """Budget exhaustion stops execution before starting a step."""
+
         def expensive_factory(rt=None):
             mock = AsyncMock()
             mock.name = "mock"
             mock.invoke.return_value = AgentResult(
-                status="completed", output="expensive", cost_usd=5.0,
+                status="completed",
+                output="expensive",
+                cost_usd=5.0,
             )
             return mock
 
@@ -428,7 +444,10 @@ class TestContextManagerWiring:
                 steps=[
                     SupervisorStep(id="a", name="done", status=StepStatus.COMPLETED),
                     SupervisorStep(
-                        id="b", name="pending", description="task2", depends_on=["a"],
+                        id="b",
+                        name="pending",
+                        description="task2",
+                        depends_on=["a"],
                     ),
                 ],
             ),
@@ -454,7 +473,9 @@ class TestContextManagerWiring:
             steps=[
                 SupervisorStep(id="a", name="first", description="task1"),
                 SupervisorStep(
-                    id="b", name="conditional", description="task2",
+                    id="b",
+                    name="conditional",
+                    description="task2",
                     depends_on=["a"],
                     condition="a.status == completed",
                 ),
@@ -472,10 +493,10 @@ class TestContextManagerWiring:
 # Helpers
 # ──────────────────────────────────────────────────────────────
 
+
 def _make_mock_row(session: SupervisorSession) -> dict:
     """Create a mock DB row dict from a SupervisorSession."""
-    import json
-    from datetime import datetime, timezone
+    from datetime import datetime
 
     return {
         "id": session.id,
@@ -488,11 +509,13 @@ def _make_mock_row(session: SupervisorSession) -> dict:
             "context_json": session.checkpoint.context_json,
             "step_results": session.checkpoint.step_results,
             "total_cost_usd": session.checkpoint.total_cost_usd,
-        } if session.checkpoint else None,
+        }
+        if session.checkpoint
+        else None,
         "context_json": session.plan.context,
         "total_cost_usd": session.total_cost_usd,
         "config_json": session.config_json,
-        "created_at": datetime.now(timezone.utc),
-        "updated_at": datetime.now(timezone.utc),
+        "created_at": datetime.now(UTC),
+        "updated_at": datetime.now(UTC),
         "error": session.error,
     }

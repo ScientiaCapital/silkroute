@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
-import json
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -18,7 +16,6 @@ from silkroute.agent.tools import (
     _search_grep,
     create_default_registry,
 )
-
 
 # ============================================================================
 # http_request — SSRF blocking
@@ -224,9 +221,7 @@ class TestHttpRequest:
 
     @pytest.mark.asyncio
     async def test_invalid_headers_json(self):
-        result = await _http_request(
-            "https://example.com/", headers="not-valid-json"
-        )
+        result = await _http_request("https://example.com/", headers="not-valid-json")
         assert "Error" in result
         assert "headers" in result.lower() or "JSON" in result
 
@@ -237,9 +232,7 @@ class TestHttpRequest:
         mock_client = AsyncMock()
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
         mock_client.__aexit__ = AsyncMock(return_value=False)
-        mock_client.request = AsyncMock(
-            side_effect=httpx.RequestError("connection refused")
-        )
+        mock_client.request = AsyncMock(side_effect=httpx.RequestError("connection refused"))
 
         with patch("httpx.AsyncClient", return_value=mock_client):
             result = await _http_request("https://example.com/")
@@ -271,9 +264,7 @@ class TestSearchGrep:
     async def test_glob_filter_py_only(self, tmp_path: Path):
         (tmp_path / "code.py").write_text("# search_target here\n")
         (tmp_path / "readme.txt").write_text("search_target here too\n")
-        result = await _search_grep(
-            pattern="search_target", path=str(tmp_path), glob_filter="*.py"
-        )
+        result = await _search_grep(pattern="search_target", path=str(tmp_path), glob_filter="*.py")
         assert "code.py" in result
         # txt file should not appear
         assert "readme.txt" not in result
@@ -283,9 +274,7 @@ class TestSearchGrep:
         # Create 10 files each with a match
         for i in range(10):
             (tmp_path / f"file{i}.py").write_text(f"match_me line {i}\n")
-        result = await _search_grep(
-            pattern="match_me", path=str(tmp_path), max_results=3
-        )
+        result = await _search_grep(pattern="match_me", path=str(tmp_path), max_results=3)
         assert "capped at 3" in result
 
     @pytest.mark.asyncio
@@ -317,9 +306,7 @@ class TestSearchGrep:
     async def test_context_lines_included(self, tmp_path: Path):
         code = "line_before\nTARGET\nline_after\n"
         (tmp_path / "ctx.py").write_text(code)
-        result = await _search_grep(
-            pattern="TARGET", path=str(tmp_path), context_lines=1
-        )
+        result = await _search_grep(pattern="TARGET", path=str(tmp_path), context_lines=1)
         assert "line_before" in result
         assert "line_after" in result
 

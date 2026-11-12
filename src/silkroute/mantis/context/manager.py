@@ -76,10 +76,7 @@ class ContextManager:
 
         Called with _lock held.
         """
-        step_keys = [
-            k for k, v in self._entries.items()
-            if v.scope == ContextScope.STEP
-        ]
+        step_keys = [k for k, v in self._entries.items() if v.scope == ContextScope.STEP]
         # Evict by insertion order (dict preserves order in Python 3.7+)
         for key in step_keys:
             if self._total_tokens <= self._max_tokens:

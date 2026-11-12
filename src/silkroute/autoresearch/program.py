@@ -22,8 +22,7 @@ def load_program(target_name: str) -> str:
     program_path = _PROGRAMS_DIR / f"{target_name}.md"
     if not program_path.exists():
         raise FileNotFoundError(
-            f"No program file found for target '{target_name}' "
-            f"at {program_path}"
+            f"No program file found for target '{target_name}' at {program_path}"
         )
     return program_path.read_text()
 

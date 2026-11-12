@@ -51,7 +51,8 @@ async def require_not_demo(
 ) -> None:
     """Block money-spending endpoints when demo_mode is enabled.
 
-    Applied to /runtime/invoke, /runtime/stream, and POST /tasks so a public
+    Applied to /runtime/invoke, /runtime/stream, POST /tasks, and
+    POST /supervisor/sessions (+ /resume) so a public
     try-it deployment can expose the read-only surface without letting anyone
     drain the budget. Returns 403 when demo_mode is on.
     """

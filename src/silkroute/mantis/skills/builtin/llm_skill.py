@@ -79,9 +79,7 @@ async def _summarize_handler(
     llm = _skill_ctx.get_llm(_SUMMARIZE_MODEL)
     max_length = min(max(max_length, 50), 2000)
 
-    user_content = (
-        f"Summarize the following text in at most {max_length} words:\n\n{text}"
-    )
+    user_content = f"Summarize the following text in at most {max_length} words:\n\n{text}"
 
     try:
         from langchain_core.messages import HumanMessage, SystemMessage

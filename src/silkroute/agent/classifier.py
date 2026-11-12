@@ -24,21 +24,52 @@ class TaskClassification:
 
 # Multi-word patterns checked first to avoid false positives
 _PREMIUM_TRIGGERS = [
-    "security review", "security audit", "complex debug", "deep debug",
-    "architect", "migration plan", "performance profil", "vulnerability",
-    "codebase refactor", "system design",
+    "security review",
+    "security audit",
+    "complex debug",
+    "deep debug",
+    "architect",
+    "migration plan",
+    "performance profil",
+    "vulnerability",
+    "codebase refactor",
+    "system design",
 ]
 
 _STANDARD_TRIGGERS = [
-    "review", "refactor", "implement", "fix bug", "write test",
-    "add feature", "debug", "optimize", "analyze", "create",
-    "build", "develop", "integrate", "update", "modify",
+    "review",
+    "refactor",
+    "implement",
+    "fix bug",
+    "write test",
+    "add feature",
+    "debug",
+    "optimize",
+    "analyze",
+    "create",
+    "build",
+    "develop",
+    "integrate",
+    "update",
+    "modify",
 ]
 
 _FREE_TRIGGERS = [
-    "summarize", "format", "lint", "label", "triage",
-    "list", "describe", "explain", "translate", "count",
-    "rename", "typo", "comment", "log", "echo",
+    "summarize",
+    "format",
+    "lint",
+    "label",
+    "triage",
+    "list",
+    "describe",
+    "explain",
+    "translate",
+    "count",
+    "rename",
+    "typo",
+    "comment",
+    "log",
+    "echo",
 ]
 
 _CAPABILITY_KEYWORDS: dict[str, Capability] = {

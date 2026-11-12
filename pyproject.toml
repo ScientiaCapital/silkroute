@@ -5,12 +5,12 @@ build-backend = "hatchling.build"
 [project]
 name = "silkroute"
 version = "0.1.0"
-description = "The first AI agent orchestrator built exclusively for Chinese LLMs — cost-optimized, China-native, with per-project budget governance."
+description = "Agent orchestrator with tiered model routing, per-project budget caps, and an MCP client and server."
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.12"
 authors = [
-    { name = "Tim Kipper", email = "tim@scientiacapital.com" },
+    { name = "Tim Kipper", email = "tkipper@gmail.com" },
 ]
 keywords = [
     "ai-agent",
@@ -45,12 +45,14 @@ dependencies = [
     "asyncpg>=0.29.0",
     "fastapi>=0.115.0",
     "uvicorn[standard]>=0.30.0",
-    "mcp>=1.25.0",
+    # mcp 2.x changed the low-level Server API (no list_tools decorator); the demo
+    # server and bridge still use 1.x. Lift the cap after porting to 2.x.
+    "mcp>=1.25.0,<2",
 ]
 
 [project.optional-dependencies]
 mantis = [
-    "deepagents>=0.4.1,<0.5.0",
+    "deepagents>=0.7.35,<0.8.0",
     "langchain-openai>=0.3.0",
 ]
 dev = [
@@ -87,6 +89,7 @@ select = ["E", "F", "I", "N", "W", "UP", "ANN", "B", "SIM"]
 
 [tool.ruff.lint.per-file-ignores]
 "src/silkroute/api/**/*.py" = ["B008"]  # FastAPI Depends() in function defaults is idiomatic
+"tests/**/*.py" = ["ANN"]  # pytest functions return None and fixtures are typed by injection
 
 [tool.mypy]
 python_version = "3.12"
@@ -96,4 +99,5 @@ warn_unused_configs = true
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
 testpaths = ["tests"]

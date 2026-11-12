@@ -121,16 +121,16 @@ class LLMDecomposer:
 
         from langchain_core.messages import HumanMessage, SystemMessage
 
-        response = await llm.ainvoke([
-            SystemMessage(content=_DECOMPOSE_SYSTEM_PROMPT),
-            HumanMessage(content=f"Decompose this task:\n{task}"),
-        ])
+        response = await llm.ainvoke(
+            [
+                SystemMessage(content=_DECOMPOSE_SYSTEM_PROMPT),
+                HumanMessage(content=f"Decompose this task:\n{task}"),
+            ]
+        )
 
         return self._parse_response(response.content, task, cfg)
 
-    def _parse_response(
-        self, content: str, task: str, config: RuntimeConfig
-    ) -> OrchestrationPlan:
+    def _parse_response(self, content: str, task: str, config: RuntimeConfig) -> OrchestrationPlan:
         """Parse LLM JSON response into an OrchestrationPlan.
 
         Handles markdown-fenced JSON (```json...```) and bare JSON objects.

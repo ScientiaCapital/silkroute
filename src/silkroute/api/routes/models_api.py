@@ -54,10 +54,7 @@ async def list_models(
         candidates = list(ALL_MODELS.values())
 
     if capability is not None:
-        candidates = [
-            m for m in candidates
-            if capability in [c.value for c in m.capabilities]
-        ]
+        candidates = [m for m in candidates if capability in [c.value for c in m.capabilities]]
 
     return [_model_to_response(m) for m in candidates]
 

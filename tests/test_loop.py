@@ -57,7 +57,9 @@ def _make_tool_call_response(tool_name: str, arguments: str):
     message.model_dump.return_value = {
         "role": "assistant",
         "content": "Let me check that.",
-        "tool_calls": [{"id": "call_test_123", "function": {"name": tool_name, "arguments": arguments}}],
+        "tool_calls": [
+            {"id": "call_test_123", "function": {"name": tool_name, "arguments": arguments}}
+        ],
     }
 
     choice = MagicMock()
@@ -201,9 +203,9 @@ class TestRunAgent:
         assert session.status == SessionStatus.COMPLETED
         # Model should be from premium tier
         from silkroute.providers.models import ALL_MODELS
+
         model = ALL_MODELS.get(session.model_id)
         assert model is not None
-
 
     @pytest.mark.asyncio
     async def test_direct_provider_key_threaded_into_acompletion(self, monkeypatch):
@@ -339,9 +341,7 @@ class TestRunAgentStreaming:
         queue: asyncio.Queue[str | None] = asyncio.Queue()
 
         with patch("silkroute.agent.loop.litellm") as mock_litellm:
-            mock_litellm.acompletion = AsyncMock(
-                side_effect=[tool_response, final_response]
-            )
+            mock_litellm.acompletion = AsyncMock(side_effect=[tool_response, final_response])
             mock_litellm.completion_cost.return_value = 0.0001
             mock_litellm.suppress_debug_info = True
 
@@ -423,9 +423,7 @@ class TestRunAgentStreaming:
         queue: asyncio.Queue[str | None] = asyncio.Queue()
 
         with patch("silkroute.agent.loop.litellm") as mock_litellm:
-            mock_litellm.acompletion = AsyncMock(
-                side_effect=RuntimeError("API down")
-            )
+            mock_litellm.acompletion = AsyncMock(side_effect=RuntimeError("API down"))
             mock_litellm.suppress_debug_info = True
 
             session = await run_agent(
@@ -464,14 +462,33 @@ class TestRunAgentWithDB:
         with (
             patch("silkroute.agent.loop.litellm") as mock_litellm,
             patch("silkroute.agent.loop.AgentConfig") as mock_cfg,
-            patch("silkroute.db.pool.asyncpg.create_pool", new_callable=AsyncMock, return_value=mock_pool),
+            patch(
+                "silkroute.db.pool.asyncpg.create_pool",
+                new_callable=AsyncMock,
+                return_value=mock_pool,
+            ),
             patch("silkroute.agent.loop.db_sessions", mock_db_sessions, create=True),
-            patch("silkroute.db.repositories.sessions.create_session", mock_db_sessions.create_session),
-            patch("silkroute.db.repositories.sessions.update_session", mock_db_sessions.update_session),
-            patch("silkroute.db.repositories.sessions.close_session", mock_db_sessions.close_session),
-            patch("silkroute.db.repositories.projects.get_monthly_spend", mock_db_projects.get_monthly_spend),
-            patch("silkroute.db.repositories.projects.get_project_budget", mock_db_projects.get_project_budget),
-            patch("silkroute.db.repositories.cost_logs.insert_cost_log", mock_db_cost_logs.insert_cost_log),
+            patch(
+                "silkroute.db.repositories.sessions.create_session", mock_db_sessions.create_session
+            ),
+            patch(
+                "silkroute.db.repositories.sessions.update_session", mock_db_sessions.update_session
+            ),
+            patch(
+                "silkroute.db.repositories.sessions.close_session", mock_db_sessions.close_session
+            ),
+            patch(
+                "silkroute.db.repositories.projects.get_monthly_spend",
+                mock_db_projects.get_monthly_spend,
+            ),
+            patch(
+                "silkroute.db.repositories.projects.get_project_budget",
+                mock_db_projects.get_project_budget,
+            ),
+            patch(
+                "silkroute.db.repositories.cost_logs.insert_cost_log",
+                mock_db_cost_logs.insert_cost_log,
+            ),
         ):
             mock_cfg.return_value.persist_sessions = True
             mock_litellm.acompletion = AsyncMock(return_value=mock_response)
@@ -480,6 +497,7 @@ class TestRunAgentWithDB:
 
             # Reset pool singleton
             import silkroute.db.pool as pool_mod
+
             pool_mod._pool = None
 
             session = await run_agent(
@@ -499,7 +517,11 @@ class TestRunAgentWithDB:
         with (
             patch("silkroute.agent.loop.litellm") as mock_litellm,
             patch("silkroute.agent.loop.AgentConfig") as mock_cfg,
-            patch("silkroute.db.pool.asyncpg.create_pool", new_callable=AsyncMock, side_effect=OSError("refused")),
+            patch(
+                "silkroute.db.pool.asyncpg.create_pool",
+                new_callable=AsyncMock,
+                side_effect=OSError("refused"),
+            ),
         ):
             mock_cfg.return_value.persist_sessions = True
             mock_litellm.acompletion = AsyncMock(return_value=mock_response)
@@ -507,6 +529,7 @@ class TestRunAgentWithDB:
             mock_litellm.suppress_debug_info = True
 
             import silkroute.db.pool as pool_mod
+
             pool_mod._pool = None
 
             session = await run_agent(
@@ -566,11 +589,23 @@ class TestFinopsReporting:
                 new_callable=AsyncMock,
                 return_value=mock_pool,
             ),
-            patch("silkroute.db.repositories.sessions.create_session", mock_db_sessions.create_session),
-            patch("silkroute.db.repositories.sessions.update_session", mock_db_sessions.update_session),
-            patch("silkroute.db.repositories.sessions.close_session", mock_db_sessions.close_session),
-            patch("silkroute.db.repositories.projects.get_monthly_spend", mock_db_projects.get_monthly_spend),
-            patch("silkroute.db.repositories.projects.get_project_budget", mock_db_projects.get_project_budget),
+            patch(
+                "silkroute.db.repositories.sessions.create_session", mock_db_sessions.create_session
+            ),
+            patch(
+                "silkroute.db.repositories.sessions.update_session", mock_db_sessions.update_session
+            ),
+            patch(
+                "silkroute.db.repositories.sessions.close_session", mock_db_sessions.close_session
+            ),
+            patch(
+                "silkroute.db.repositories.projects.get_monthly_spend",
+                mock_db_projects.get_monthly_spend,
+            ),
+            patch(
+                "silkroute.db.repositories.projects.get_project_budget",
+                mock_db_projects.get_project_budget,
+            ),
             patch("silkroute.db.repositories.cost_logs.insert_cost_log", new_callable=AsyncMock),
             patch(
                 "silkroute.integrations.finops_client.report_usage", new_callable=AsyncMock
@@ -582,6 +617,7 @@ class TestFinopsReporting:
             mock_litellm.suppress_debug_info = True
 
             import silkroute.db.pool as pool_mod
+
             pool_mod._pool = None
 
             session = await run_agent("Quick task", budget_limit_usd=1.0, max_iterations=5)

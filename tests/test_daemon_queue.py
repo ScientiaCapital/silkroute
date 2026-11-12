@@ -157,12 +157,21 @@ class TestTaskQueue:
     ) -> None:
         q = TaskQueue(redis=fake_redis)
         r1 = TaskResult(
-            request_id="req-1", session_id="s1", status="failed",
-            cost_usd=0.01, iterations=1, duration_ms=100, error="boom",
+            request_id="req-1",
+            session_id="s1",
+            status="failed",
+            cost_usd=0.01,
+            iterations=1,
+            duration_ms=100,
+            error="boom",
         )
         r2 = TaskResult(
-            request_id="req-1", session_id="s2", status="completed",
-            cost_usd=0.03, iterations=3, duration_ms=9000,
+            request_id="req-1",
+            session_id="s2",
+            status="completed",
+            cost_usd=0.03,
+            iterations=3,
+            duration_ms=9000,
         )
         await q.record_result(r1)
         await q.record_result(r2)
@@ -191,9 +200,7 @@ class TestTaskQueue:
         assert drained == []
 
     @pytest.mark.asyncio
-    async def test_total_submitted_counter(
-        self, fake_redis: fakeredis.aioredis.FakeRedis
-    ) -> None:
+    async def test_total_submitted_counter(self, fake_redis: fakeredis.aioredis.FakeRedis) -> None:
         q = TaskQueue(redis=fake_redis)
         assert q.total_submitted == 0
         await q.submit(TaskRequest(task="a"))
@@ -201,19 +208,29 @@ class TestTaskQueue:
         assert q.total_submitted == 2
 
     @pytest.mark.asyncio
-    async def test_total_completed_counter(
-        self, fake_redis: fakeredis.aioredis.FakeRedis
-    ) -> None:
+    async def test_total_completed_counter(self, fake_redis: fakeredis.aioredis.FakeRedis) -> None:
         q = TaskQueue(redis=fake_redis)
         assert q.total_completed == 0
-        await q.record_result(TaskResult(
-            request_id="r1", session_id="s1", status="completed",
-            cost_usd=0.01, iterations=1, duration_ms=100,
-        ))
-        await q.record_result(TaskResult(
-            request_id="r2", session_id="s2", status="failed",
-            cost_usd=0.02, iterations=2, duration_ms=200,
-        ))
+        await q.record_result(
+            TaskResult(
+                request_id="r1",
+                session_id="s1",
+                status="completed",
+                cost_usd=0.01,
+                iterations=1,
+                duration_ms=100,
+            )
+        )
+        await q.record_result(
+            TaskResult(
+                request_id="r2",
+                session_id="s2",
+                status="failed",
+                cost_usd=0.02,
+                iterations=2,
+                duration_ms=200,
+            )
+        )
         assert q.total_completed == 2
 
     @pytest.mark.asyncio
@@ -226,9 +243,7 @@ class TestTaskQueue:
             await q.submit(TaskRequest(task="c"))
 
     @pytest.mark.asyncio
-    async def test_init_counters_from_redis(
-        self, fake_redis: fakeredis.aioredis.FakeRedis
-    ) -> None:
+    async def test_init_counters_from_redis(self, fake_redis: fakeredis.aioredis.FakeRedis) -> None:
         """Counters should initialize from Redis values (crash recovery)."""
         await fake_redis.set("silkroute:counter:submitted", "42")
         await fake_redis.set("silkroute:counter:completed", "37")
@@ -255,10 +270,16 @@ class TestTaskQueue:
         """Submit and record_result should INCR Redis counters."""
         q = TaskQueue(redis=fake_redis)
         await q.submit(TaskRequest(task="a"))
-        await q.record_result(TaskResult(
-            request_id="r1", session_id="s1", status="completed",
-            cost_usd=0.01, iterations=1, duration_ms=100,
-        ))
+        await q.record_result(
+            TaskResult(
+                request_id="r1",
+                session_id="s1",
+                status="completed",
+                cost_usd=0.01,
+                iterations=1,
+                duration_ms=100,
+            )
+        )
 
         assert await fake_redis.get("silkroute:counter:submitted") == "1"
         assert await fake_redis.get("silkroute:counter:completed") == "1"

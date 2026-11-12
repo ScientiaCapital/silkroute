@@ -54,13 +54,17 @@ class TestListPendingMigrations:
         create_sql = mock_pool.execute.call_args[0][0]
         assert "CREATE TABLE IF NOT EXISTS schema_migrations" in create_sql
 
-    async def test_excludes_already_applied(self, mock_pool: AsyncMock, migrations_dir: Path) -> None:
+    async def test_excludes_already_applied(
+        self, mock_pool: AsyncMock, migrations_dir: Path
+    ) -> None:
         mock_pool.fetch.return_value = [{"version": 1}]
         pending = await list_pending_migrations(mock_pool, migrations_dir)
         assert [m.version for m in pending] == [2]
 
     async def test_all_pending_when_none_applied(
-        self, mock_pool: AsyncMock, migrations_dir: Path,
+        self,
+        mock_pool: AsyncMock,
+        migrations_dir: Path,
     ) -> None:
         mock_pool.fetch.return_value = []
         pending = await list_pending_migrations(mock_pool, migrations_dir)
@@ -78,7 +82,9 @@ class TestApplyMigrations:
         return conn
 
     async def test_applies_all_pending_in_order(
-        self, mock_pool: AsyncMock, migrations_dir: Path,
+        self,
+        mock_pool: AsyncMock,
+        migrations_dir: Path,
     ) -> None:
         mock_pool.fetch.return_value = []
         conn = self._mock_conn()

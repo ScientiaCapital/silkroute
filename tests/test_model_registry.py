@@ -25,11 +25,7 @@ class TestRegistryIntegrity:
                 assert model.output_cost_per_m == 0.0
 
     def test_tiered_models_are_registered(self) -> None:
-        tiered_ids = {
-            model.model_id
-            for models in MODELS_BY_TIER.values()
-            for model in models
-        }
+        tiered_ids = {model.model_id for models in MODELS_BY_TIER.values() for model in models}
         assert tiered_ids <= set(ALL_MODELS.keys())
 
     def test_ollama_local_model_count(self) -> None:

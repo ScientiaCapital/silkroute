@@ -43,11 +43,7 @@ def model_fits_ram(model: ModelSpec, ram_gb: float) -> bool:
     cloud models (``min_ram_gb == 0``) are delegated, never run locally, so they
     never "fit" in this sense.
     """
-    return (
-        model.provider == Provider.OLLAMA
-        and model.min_ram_gb > 0
-        and model.min_ram_gb <= ram_gb
-    )
+    return model.provider == Provider.OLLAMA and model.min_ram_gb > 0 and model.min_ram_gb <= ram_gb
 
 
 def best_local_model(ram_gb: float, tier: ModelTier = ModelTier.FREE) -> ModelSpec | None:
@@ -110,8 +106,7 @@ def select_model(
         candidates = MODELS_BY_TIER.get(tier, [])
         # Filter to non-local models with tool calling support
         candidates = [
-            m for m in candidates
-            if m.provider != Provider.OLLAMA and m.supports_tool_calling
+            m for m in candidates if m.provider != Provider.OLLAMA and m.supports_tool_calling
         ]
         if candidates:
             best = max(candidates, key=lambda m: _score_model(m, capabilities))

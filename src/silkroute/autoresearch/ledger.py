@@ -18,11 +18,11 @@ _DELIMITER = "\t"
 class LedgerEntry:
     """A single experiment result."""
 
-    commit: str       # Short git commit hash (7 chars)
-    score: float      # Composite metric score
+    commit: str  # Short git commit hash (7 chars)
+    score: float  # Composite metric score
     pass_rate: float  # Test pass rate 0.0–1.0
-    coverage: float   # Coverage fraction 0.0–1.0
-    status: str       # "keep", "discard", or "crash"
+    coverage: float  # Coverage fraction 0.0–1.0
+    status: str  # "keep", "discard", or "crash"
     description: str  # What this experiment tried
 
 
@@ -60,14 +60,16 @@ class Ledger:
         with self._path.open(newline="") as f:
             reader = csv.DictReader(f, delimiter=_DELIMITER)
             for row in reader:
-                entries.append(LedgerEntry(
-                    commit=row["commit"],
-                    score=float(row["score"]),
-                    pass_rate=float(row["pass_rate"]),
-                    coverage=float(row["coverage"]),
-                    status=row["status"],
-                    description=row["description"],
-                ))
+                entries.append(
+                    LedgerEntry(
+                        commit=row["commit"],
+                        score=float(row["score"]),
+                        pass_rate=float(row["pass_rate"]),
+                        coverage=float(row["coverage"]),
+                        status=row["status"],
+                        description=row["description"],
+                    )
+                )
         return entries
 
     def recent(self, n: int = 5) -> list[LedgerEntry]:

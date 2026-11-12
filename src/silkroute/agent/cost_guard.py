@@ -88,13 +88,11 @@ def check_budget(
 
     if usage_fraction >= budget_config.alert_threshold_critical:
         warning = (
-            f"CRITICAL: {usage_fraction:.0%} of session budget used"
-            f" (${spent:.4f} / ${limit:.2f})"
+            f"CRITICAL: {usage_fraction:.0%} of session budget used (${spent:.4f} / ${limit:.2f})"
         )
     elif usage_fraction >= budget_config.alert_threshold_warning:
         warning = (
-            f"WARNING: {usage_fraction:.0%} of session budget used"
-            f" (${spent:.4f} / ${limit:.2f})"
+            f"WARNING: {usage_fraction:.0%} of session budget used (${spent:.4f} / ${limit:.2f})"
         )
 
     return BudgetCheck(
@@ -156,9 +154,7 @@ def check_global_budget(
             monthly_spent_usd=monthly_spent,
             monthly_limit_usd=monthly_limit,
             hourly_rate_usd=hourly_rate,
-            warning=(
-                f"Monthly budget exceeded: ${monthly_spent:.2f} / ${monthly_limit:.2f}"
-            ),
+            warning=(f"Monthly budget exceeded: ${monthly_spent:.2f} / ${monthly_limit:.2f}"),
         )
 
     # Daily cap
@@ -170,9 +166,7 @@ def check_global_budget(
             monthly_spent_usd=monthly_spent,
             monthly_limit_usd=monthly_limit,
             hourly_rate_usd=hourly_rate,
-            warning=(
-                f"Daily budget exceeded: ${daily_spent:.2f} / ${daily_limit:.2f}"
-            ),
+            warning=(f"Daily budget exceeded: ${daily_spent:.2f} / ${daily_limit:.2f}"),
         )
 
     # Warning thresholds on monthly budget

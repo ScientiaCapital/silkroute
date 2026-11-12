@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import time
 
 import pytest
 
@@ -14,9 +13,14 @@ from silkroute.mantis.orchestrator.budget import (
     allocate_budget,
 )
 from silkroute.mantis.orchestrator.middleware import (
+    AlertMiddleware,
+    AlertThresholds,
     BudgetMiddleware,
+    CheckpointMiddleware,
     LoggingMiddleware,
     MiddlewareContext,
+    RetryConfig,
+    RetryMiddleware,
     ValidationMiddleware,
 )
 from silkroute.mantis.orchestrator.models import (
@@ -93,7 +97,7 @@ class TestAllocateBudget:
         plan = OrchestrationPlan(
             total_budget_usd=10.0,
             sub_tasks=[
-                SubTask(id="free", tier_hint="free"),     # weight 0.5
+                SubTask(id="free", tier_hint="free"),  # weight 0.5
                 SubTask(id="std", tier_hint="standard"),  # weight 2.0
                 SubTask(id="prem", tier_hint="premium"),  # weight 5.0
             ],
@@ -376,14 +380,6 @@ class TestAggregateResults:
 # ──────────────────────────────────────────────────────────────
 # Phase 4: settle(), immutable allocate, new middleware tests
 # ──────────────────────────────────────────────────────────────
-
-from silkroute.mantis.orchestrator.middleware import (
-    AlertMiddleware,
-    AlertThresholds,
-    CheckpointMiddleware,
-    RetryConfig,
-    RetryMiddleware,
-)
 
 
 class TestBudgetSettle:

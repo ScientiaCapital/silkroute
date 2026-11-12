@@ -31,7 +31,7 @@ class TestRalphCycle:
 
     @pytest.mark.asyncio
     @patch("silkroute.mantis.supervisor.ralph.SupervisorRuntime")
-    async def test_cycle_with_task(self, MockRT):
+    async def test_cycle_with_task(self, mock_rt_cls):
         """Task in queue → executes plan."""
         mock_queue = AsyncMock()
 
@@ -41,14 +41,14 @@ class TestRalphCycle:
         task_request.project_id = "default"
         mock_queue.consume.side_effect = [task_request, None]
 
-        from silkroute.mantis.supervisor.models import SupervisorSession, SessionStatus
+        from silkroute.mantis.supervisor.models import SessionStatus, SupervisorSession
 
         mock_session = SupervisorSession(
             id="sess-ralph",
             status=SessionStatus.COMPLETED,
             total_cost_usd=0.05,
         )
-        mock_rt = MockRT.return_value
+        mock_rt = mock_rt_cls.return_value
         mock_rt.create_session = AsyncMock(return_value=mock_session)
         mock_rt._run_session = AsyncMock()
 

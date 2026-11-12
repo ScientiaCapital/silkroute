@@ -34,6 +34,7 @@ def _line_count(fp: Path) -> int:
     except OSError:
         return 10**9
 
+
 _SYSTEM_TEMPLATE = """\
 {program}
 
@@ -123,7 +124,8 @@ async def propose_change(
     if is_local:
         small = [f for f in target_files if _line_count(f) <= _LOCAL_MAX_LINES]
         file_listing = _build_file_listing(
-            small[:_LOCAL_MAX_FILES], max_lines_per_file=_LOCAL_MAX_LINES,
+            small[:_LOCAL_MAX_FILES],
+            max_lines_per_file=_LOCAL_MAX_LINES,
         )
     else:
         file_listing = _build_file_listing(target_files)
@@ -163,7 +165,10 @@ async def _propose_local(model_id: str, messages: list[dict]) -> ProposedChange:
         except ValueError as e:
             last_err = e
             logger.warning(
-                "local propose attempt %d/%d failed: %s", attempt, _LOCAL_MAX_ATTEMPTS, e,
+                "local propose attempt %d/%d failed: %s",
+                attempt,
+                _LOCAL_MAX_ATTEMPTS,
+                e,
             )
     assert last_err is not None
     raise last_err
@@ -201,8 +206,7 @@ def _build_file_listing(files: list[Path], max_lines_per_file: int = 200) -> str
         if len(lines) > max_lines_per_file:
             truncated = "\n".join(lines[:max_lines_per_file])
             parts.append(
-                f"### {fp}\n```\n{truncated}\n"
-                f"... (truncated at {max_lines_per_file} lines)\n```"
+                f"### {fp}\n```\n{truncated}\n... (truncated at {max_lines_per_file} lines)\n```"
             )
         else:
             parts.append(f"### {fp}\n```\n{content}\n```")
@@ -237,9 +241,7 @@ def _parse_response(content: str) -> ProposedChange:
                     f"LLM response is not valid JSON: {e}\nResponse: {text[:500]}"
                 ) from e
         else:
-            raise ValueError(
-                f"LLM response is not valid JSON: {e}\nResponse: {text[:500]}"
-            ) from e
+            raise ValueError(f"LLM response is not valid JSON: {e}\nResponse: {text[:500]}") from e
 
     required = {"file_path", "old_code", "new_code", "rationale"}
     missing = required - set(data.keys())

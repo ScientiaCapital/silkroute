@@ -92,7 +92,7 @@ class TestBridgeRoundTrip:
         )
         assert stack is not None, "bridge failed to connect to the mock epiphan server"
         try:
-            assert EXPECTED_TOOLS <= set(registry.tool_names)
+            assert set(registry.tool_names) >= EXPECTED_TOOLS
             result = await registry.execute("get_recording_status", {})
             assert "recording" in result.lower()
             assert "320" in result

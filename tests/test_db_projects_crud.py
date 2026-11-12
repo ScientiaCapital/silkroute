@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -38,19 +38,40 @@ class TestCreateProject:
         mock_pool.fetchrow.assert_awaited_once()
 
     async def test_passes_all_fields(self, mock_pool: AsyncMock) -> None:
-        mock_pool.fetchrow.return_value = {"id": "x", "name": "X", "description": "desc",
-            "github_repo": "org/repo", "budget_monthly_usd": 5.0, "budget_daily_usd": 1.0,
-            "created_at": "", "updated_at": ""}
-        await create_project(mock_pool, "x", "X", description="desc",
-            github_repo="org/repo", budget_monthly_usd=5.0, budget_daily_usd=1.0)
+        mock_pool.fetchrow.return_value = {
+            "id": "x",
+            "name": "X",
+            "description": "desc",
+            "github_repo": "org/repo",
+            "budget_monthly_usd": 5.0,
+            "budget_daily_usd": 1.0,
+            "created_at": "",
+            "updated_at": "",
+        }
+        await create_project(
+            mock_pool,
+            "x",
+            "X",
+            description="desc",
+            github_repo="org/repo",
+            budget_monthly_usd=5.0,
+            budget_daily_usd=1.0,
+        )
         sql = mock_pool.fetchrow.call_args[0][0]
         assert "INSERT INTO projects" in sql
         assert "RETURNING" in sql
 
     async def test_default_budgets(self, mock_pool: AsyncMock) -> None:
-        mock_pool.fetchrow.return_value = {"id": "d", "name": "D", "description": "",
-            "github_repo": "", "budget_monthly_usd": 2.85, "budget_daily_usd": 0.10,
-            "created_at": "", "updated_at": ""}
+        mock_pool.fetchrow.return_value = {
+            "id": "d",
+            "name": "D",
+            "description": "",
+            "github_repo": "",
+            "budget_monthly_usd": 2.85,
+            "budget_daily_usd": 0.10,
+            "created_at": "",
+            "updated_at": "",
+        }
         await create_project(mock_pool, "d", "D")
         args = mock_pool.fetchrow.call_args[0]
         assert args[5] == 2.85  # budget_monthly_usd default
@@ -140,6 +161,7 @@ class TestDeleteProject:
 
     async def test_fk_violation_raises_value_error(self, mock_pool: AsyncMock) -> None:
         import asyncpg
+
         mock_pool.execute.side_effect = asyncpg.ForeignKeyViolationError("")
         with pytest.raises(ValueError, match="associated cost records"):
             await delete_project(mock_pool, "has-costs")

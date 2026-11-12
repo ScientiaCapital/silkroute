@@ -121,9 +121,7 @@ class TestWorkerLoop:
         assert result.status == "completed"
 
     @pytest.mark.asyncio
-    async def test_stops_on_shutdown_event(
-        self, fake_redis: fakeredis.aioredis.FakeRedis
-    ) -> None:
+    async def test_stops_on_shutdown_event(self, fake_redis: fakeredis.aioredis.FakeRedis) -> None:
         q = TaskQueue(redis=fake_redis)
         shutdown = asyncio.Event()
         shutdown.set()  # Already set — worker should exit immediately
@@ -160,9 +158,7 @@ class TestWorkerLoop:
         assert result.error == "boom"
 
     @pytest.mark.asyncio
-    async def test_processes_multiple_tasks(
-        self, fake_redis: fakeredis.aioredis.FakeRedis
-    ) -> None:
+    async def test_processes_multiple_tasks(self, fake_redis: fakeredis.aioredis.FakeRedis) -> None:
         q = TaskQueue(redis=fake_redis)
         shutdown = asyncio.Event()
         r1 = TaskRequest(task="task 1")

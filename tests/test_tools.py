@@ -90,7 +90,7 @@ class TestBuiltinTools:
     async def test_read_file_existing(self, tmp_path):
         test_file = tmp_path / "test.txt"
         test_file.write_text("line1\nline2\nline3")
-        registry = create_default_registry()
+        registry = create_default_registry(workspace_dir=str(tmp_path))
         result = await registry.execute("read_file", {"path": str(test_file)})
         assert "line1" in result
         assert "line3" in result
@@ -98,8 +98,10 @@ class TestBuiltinTools:
     @pytest.mark.asyncio
     async def test_write_file(self, tmp_path):
         target = tmp_path / "subdir" / "out.txt"
-        registry = create_default_registry()
-        result = await registry.execute("write_file", {"path": str(target), "content": "hello world"})
+        registry = create_default_registry(workspace_dir=str(tmp_path))
+        result = await registry.execute(
+            "write_file", {"path": str(target), "content": "hello world"}
+        )
         assert "Successfully wrote" in result
         assert target.read_text() == "hello world"
 
@@ -107,7 +109,7 @@ class TestBuiltinTools:
     async def test_list_directory(self, tmp_path):
         (tmp_path / "file_a.txt").write_text("a")
         (tmp_path / "dir_b").mkdir()
-        registry = create_default_registry()
+        registry = create_default_registry(workspace_dir=str(tmp_path))
         result = await registry.execute("list_directory", {"path": str(tmp_path)})
         assert "dir_b" in result
         assert "file_a.txt" in result

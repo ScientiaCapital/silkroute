@@ -142,7 +142,8 @@ async def update_project(
         return await get_project(pool, project_id)
 
     fields.append("updated_at = NOW()")
-    sql = f"UPDATE projects SET {', '.join(fields)} WHERE id = $1 RETURNING *"
+    # Column names come from the fixed list above; every value is a $n parameter.
+    sql = f"UPDATE projects SET {', '.join(fields)} WHERE id = $1 RETURNING *"  # nosec B608
     row = await pool.fetchrow(sql, project_id, *values)
     if row is None:
         return None
